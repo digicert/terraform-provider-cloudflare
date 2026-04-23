@@ -26,6 +26,7 @@ var _ resource.ResourceWithConfigValidators = (*WorkersScriptResource)(nil)
 
 func ResourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
+		Version: 500,
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description:   "Name of the script, used in URLs and route configuration.",
@@ -122,11 +123,12 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 									),
 								},
 							},
-							"run_worker_first": schema.BoolAttribute{
-								Description: "When true, requests will always invoke the Worker script. Otherwise, attempt to serve an asset matching the request, falling back to the Worker script.",
-								Computed:    true,
-								Optional:    true,
-								Default:     booldefault.StaticBool(false),
+							"run_worker_first": schema.DynamicAttribute{
+								Description:   "When a boolean true, requests will always invoke the Worker script. Otherwise, attempt to serve an asset matching the request, falling back to the Worker script. When a list of strings, contains path rules to control routing to either the Worker or assets. Glob (*) and negative (!) rules are supported. Rules must start with either '/' or '!/'. At least one non-negative rule must be provided, and negative rules have higher precedence than non-negative rules.",
+								Optional:      true,
+								Validators:    []validator.Dynamic{runWorkerFirstValidator{}},
+								CustomType:    customfield.NormalizedDynamicType{},
+								PlanModifiers: []planmodifier.Dynamic{customfield.NormalizeDynamicPlanModifier()},
 							},
 							"serve_directly": schema.BoolAttribute{
 								Description:        "When true and the incoming request matches an asset, that will be served instead of invoking the Worker script. When false, requests will always invoke the Worker script.",
@@ -168,11 +170,13 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 							Required:    true,
 						},
 						"type": schema.StringAttribute{
-							Description: "The kind of resource that the binding provides.\nAvailable values: \"ai\", \"analytics_engine\", \"assets\", \"browser\", \"d1\", \"data_blob\", \"dispatch_namespace\", \"durable_object_namespace\", \"hyperdrive\", \"inherit\", \"images\", \"json\", \"kv_namespace\", \"mtls_certificate\", \"plain_text\", \"pipelines\", \"queue\", \"r2_bucket\", \"secret_text\", \"send_email\", \"service\", \"tail_consumer\", \"text_blob\", \"vectorize\", \"version_metadata\", \"secrets_store_secret\", \"secret_key\", \"workflow\", \"wasm_module\".",
+							Description: "The kind of resource that the binding provides.\nAvailable values: \"ai\", \"ai_search\", \"ai_search_namespace\", \"analytics_engine\", \"assets\", \"browser\", \"d1\", \"data_blob\", \"dispatch_namespace\", \"durable_object_namespace\", \"hyperdrive\", \"inherit\", \"images\", \"json\", \"kv_namespace\", \"media\", \"mtls_certificate\", \"plain_text\", \"pipelines\", \"queue\", \"ratelimit\", \"r2_bucket\", \"secret_text\", \"send_email\", \"service\", \"text_blob\", \"vectorize\", \"version_metadata\", \"secrets_store_secret\", \"secret_key\", \"workflow\", \"wasm_module\", \"vpc_service\", \"vpc_network\".",
 							Required:    true,
 							Validators: []validator.String{
 								stringvalidator.OneOfCaseInsensitive(
 									"ai",
+									"ai_search",
+									"ai_search_namespace",
 									"analytics_engine",
 									"assets",
 									"browser",
@@ -185,10 +189,12 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 									"images",
 									"json",
 									"kv_namespace",
+									"media",
 									"mtls_certificate",
 									"plain_text",
 									"pipelines",
 									"queue",
+									"ratelimit",
 									"r2_bucket",
 									"secret_text",
 									"send_email",
@@ -201,6 +207,8 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 									"secret_key",
 									"workflow",
 									"wasm_module",
+									"vpc_service",
+									"vpc_network",
 								),
 							},
 						},
@@ -213,7 +221,7 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 							Optional:    true,
 						},
 						"namespace": schema.StringAttribute{
-							Description: "The name of the dispatch namespace.",
+							Description: `The namespace the instance belongs to. Defaults to "default" if omitted. Customers who don't use namespaces can simply omit this field.`,
 							Optional:    true,
 						},
 						"outbound": schema.SingleNestedAttribute{
@@ -268,6 +276,7 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 						"json": schema.StringAttribute{
 							Description: "JSON data to use.",
 							Optional:    true,
+							CustomType:  jsontypes.NormalizedType{},
 						},
 						"certificate_id": schema.StringAttribute{
 							Description: "Identifier of the certificate to bind to.",
@@ -285,6 +294,20 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 						"queue_name": schema.StringAttribute{
 							Description: "Name of the Queue to bind to.",
 							Optional:    true,
+						},
+						"simple": schema.SingleNestedAttribute{
+							Description: "A simple rate limit.",
+							Optional:    true,
+							Attributes: map[string]schema.Attribute{
+								"limit": schema.Float64Attribute{
+									Description: "The rate limit value.",
+									Required:    true,
+								},
+								"period": schema.Int64Attribute{
+									Description: "The rate limit period in seconds.",
+									Required:    true,
+								},
+							},
 						},
 						"bucket_name": schema.StringAttribute{
 							Description: "R2 bucket to bind to.",
@@ -385,11 +408,39 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 							Optional:    true,
 						},
 						"jurisdiction": schema.StringAttribute{
-							Description: "The [jurisdiction](https://developers.cloudflare.com/r2/reference/data-location/#jurisdictional-restrictions) of the R2 bucket.\nAvailable values: \"eu\", \"fedramp\".",
+							Description: "The [jurisdiction](https://developers.cloudflare.com/r2/reference/data-location/#jurisdictional-restrictions) of the R2 bucket.\nAvailable values: \"eu\", \"fedramp\", \"fedramp-high\".",
 							Optional:    true,
 							Validators: []validator.String{
-								stringvalidator.OneOfCaseInsensitive("eu", "fedramp"),
+								stringvalidator.OneOfCaseInsensitive(
+									"eu",
+									"fedramp",
+									"fedramp-high",
+								),
 							},
+						},
+						"dispatch_namespace": schema.StringAttribute{
+							Description: "The dispatch namespace the Durable Object script belongs to.",
+							Optional:    true,
+						},
+						"entrypoint": schema.StringAttribute{
+							Description: "Entrypoint to invoke on the target Worker.",
+							Optional:    true,
+						},
+						"service_id": schema.StringAttribute{
+							Description: "Identifier of the VPC service to bind to.",
+							Optional:    true,
+						},
+						"network_id": schema.StringAttribute{
+							Description: `Identifier of the network to bind to. Only "cf1:network" is currently supported. Mutually exclusive with tunnel_id.`,
+							Optional:    true,
+						},
+						"tunnel_id": schema.StringAttribute{
+							Description: "UUID of the Cloudflare Tunnel to bind to. Mutually exclusive with network_id.",
+							Optional:    true,
+						},
+						"instance_name": schema.StringAttribute{
+							Description: "The user-chosen instance name. Must exist at deploy time. The worker can search, chat, update, and manage items/jobs on this instance.",
+							Optional:    true,
 						},
 					},
 				},
@@ -443,50 +494,41 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 			"migrations": schema.SingleNestedAttribute{
 				Description: "Migrations to apply for Durable Objects associated with this Worker.",
 				Optional:    true,
-				WriteOnly:   true,
 				CustomType:  customfield.NewNestedObjectType[WorkersScriptMetadataMigrationsModel](ctx),
 				Attributes: map[string]schema.Attribute{
 					"deleted_classes": schema.ListAttribute{
 						Description: "A list of classes to delete Durable Object namespaces from.",
 						Optional:    true,
-						WriteOnly:   true,
 						ElementType: types.StringType,
 					},
 					"new_classes": schema.ListAttribute{
 						Description: "A list of classes to create Durable Object namespaces from.",
 						Optional:    true,
-						WriteOnly:   true,
 						ElementType: types.StringType,
 					},
 					"new_sqlite_classes": schema.ListAttribute{
 						Description: "A list of classes to create Durable Object namespaces with SQLite from.",
 						Optional:    true,
-						WriteOnly:   true,
 						ElementType: types.StringType,
 					},
 					"new_tag": schema.StringAttribute{
 						Description: "Tag to set as the latest migration tag.",
 						Optional:    true,
-						WriteOnly:   true,
 					},
 					"old_tag": schema.StringAttribute{
 						Description: "Tag used to verify against the latest migration tag for this Worker. If they don't match, the upload is rejected.",
 						Optional:    true,
-						WriteOnly:   true,
 					},
 					"renamed_classes": schema.ListNestedAttribute{
 						Description: "A list of classes with Durable Object namespaces that were renamed.",
 						Optional:    true,
-						WriteOnly:   true,
 						NestedObject: schema.NestedAttributeObject{
 							Attributes: map[string]schema.Attribute{
 								"from": schema.StringAttribute{
-									Optional:  true,
-									WriteOnly: true,
+									Optional: true,
 								},
 								"to": schema.StringAttribute{
-									Optional:  true,
-									WriteOnly: true,
+									Optional: true,
 								},
 							},
 						},
@@ -494,20 +536,16 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 					"transferred_classes": schema.ListNestedAttribute{
 						Description: "A list of transfers for Durable Object namespaces from a different Worker and class to a class defined in this Worker.",
 						Optional:    true,
-						WriteOnly:   true,
 						NestedObject: schema.NestedAttributeObject{
 							Attributes: map[string]schema.Attribute{
 								"from": schema.StringAttribute{
-									Optional:  true,
-									WriteOnly: true,
+									Optional: true,
 								},
 								"from_script": schema.StringAttribute{
-									Optional:  true,
-									WriteOnly: true,
+									Optional: true,
 								},
 								"to": schema.StringAttribute{
-									Optional:  true,
-									WriteOnly: true,
+									Optional: true,
 								},
 							},
 						},
@@ -515,40 +553,33 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 					"steps": schema.ListNestedAttribute{
 						Description: "Migrations to apply in order.",
 						Optional:    true,
-						WriteOnly:   true,
 						NestedObject: schema.NestedAttributeObject{
 							Attributes: map[string]schema.Attribute{
 								"deleted_classes": schema.ListAttribute{
 									Description: "A list of classes to delete Durable Object namespaces from.",
 									Optional:    true,
-									WriteOnly:   true,
 									ElementType: types.StringType,
 								},
 								"new_classes": schema.ListAttribute{
 									Description: "A list of classes to create Durable Object namespaces from.",
 									Optional:    true,
-									WriteOnly:   true,
 									ElementType: types.StringType,
 								},
 								"new_sqlite_classes": schema.ListAttribute{
 									Description: "A list of classes to create Durable Object namespaces with SQLite from.",
 									Optional:    true,
-									WriteOnly:   true,
 									ElementType: types.StringType,
 								},
 								"renamed_classes": schema.ListNestedAttribute{
 									Description: "A list of classes with Durable Object namespaces that were renamed.",
 									Optional:    true,
-									WriteOnly:   true,
 									NestedObject: schema.NestedAttributeObject{
 										Attributes: map[string]schema.Attribute{
 											"from": schema.StringAttribute{
-												Optional:  true,
-												WriteOnly: true,
+												Optional: true,
 											},
 											"to": schema.StringAttribute{
-												Optional:  true,
-												WriteOnly: true,
+												Optional: true,
 											},
 										},
 									},
@@ -556,20 +587,16 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 								"transferred_classes": schema.ListNestedAttribute{
 									Description: "A list of transfers for Durable Object namespaces from a different Worker and class to a class defined in this Worker.",
 									Optional:    true,
-									WriteOnly:   true,
 									NestedObject: schema.NestedAttributeObject{
 										Attributes: map[string]schema.Attribute{
 											"from": schema.StringAttribute{
-												Optional:  true,
-												WriteOnly: true,
+												Optional: true,
 											},
 											"from_script": schema.StringAttribute{
-												Optional:  true,
-												WriteOnly: true,
+												Optional: true,
 											},
 											"to": schema.StringAttribute{
-												Optional:  true,
-												WriteOnly: true,
+												Optional: true,
 											},
 										},
 									},
@@ -620,6 +647,31 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 							},
 						},
 					},
+					"traces": schema.SingleNestedAttribute{
+						Description: "Trace settings for the Worker.",
+						Optional:    true,
+						Attributes: map[string]schema.Attribute{
+							"destinations": schema.ListAttribute{
+								Description: "A list of destinations where traces will be exported to.",
+								Optional:    true,
+								ElementType: types.StringType,
+							},
+							"enabled": schema.BoolAttribute{
+								Description: "Whether traces are enabled for the Worker.",
+								Optional:    true,
+							},
+							"head_sampling_rate": schema.Float64Attribute{
+								Description: "The sampling rate for traces. From 0 to 1 (1 = 100%, 0.1 = 10%). Default is 1.",
+								Optional:    true,
+							},
+							"persist": schema.BoolAttribute{
+								Description: "Whether trace persistence is enabled for the Worker.",
+								Computed:    true,
+								Optional:    true,
+								Default:     booldefault.StaticBool(true),
+							},
+						},
+					},
 				},
 			},
 			"created_on": schema.StringAttribute{
@@ -652,6 +704,26 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 				Description: "When the script was last modified.",
 				Computed:    true,
 				CustomType:  timetypes.RFC3339Type{},
+			},
+			"placement_mode": schema.StringAttribute{
+				Description:        `Available values: "smart", "targeted".`,
+				Computed:           true,
+				DeprecationMessage: "This attribute is deprecated.",
+				Validators: []validator.String{
+					stringvalidator.OneOfCaseInsensitive("smart", "targeted"),
+				},
+			},
+			"placement_status": schema.StringAttribute{
+				Description:        `Available values: "SUCCESS", "UNSUPPORTED_APPLICATION", "INSUFFICIENT_INVOCATIONS".`,
+				Computed:           true,
+				DeprecationMessage: "This attribute is deprecated.",
+				Validators: []validator.String{
+					stringvalidator.OneOfCaseInsensitive(
+						"SUCCESS",
+						"UNSUPPORTED_APPLICATION",
+						"INSUFFICIENT_INVOCATIONS",
+					),
+				},
 			},
 			"startup_time_ms": schema.Int64Attribute{
 				Computed: true,
@@ -695,22 +767,22 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 				},
 			},
 			"placement": schema.SingleNestedAttribute{
-				Description: "Configuration for [Smart Placement](https://developers.cloudflare.com/workers/configuration/smart-placement).",
+				Description: "Configuration for [Smart Placement](https://developers.cloudflare.com/workers/configuration/smart-placement). Specify mode='smart' for Smart Placement, or one of region/hostname/host.",
 				Computed:    true,
 				Optional:    true,
 				CustomType:  customfield.NewNestedObjectType[WorkersScriptMetadataPlacementModel](ctx),
 				Attributes: map[string]schema.Attribute{
+					"mode": schema.StringAttribute{
+						Description: "Enables [Smart Placement](https://developers.cloudflare.com/workers/configuration/smart-placement).\nAvailable values: \"smart\", \"targeted\".",
+						Optional:    true,
+						Validators: []validator.String{
+							stringvalidator.OneOfCaseInsensitive("smart", "targeted"),
+						},
+					},
 					"last_analyzed_at": schema.StringAttribute{
 						Description: "The last time the script was analyzed for [Smart Placement](https://developers.cloudflare.com/workers/configuration/smart-placement).",
 						Computed:    true,
 						CustomType:  timetypes.RFC3339Type{},
-					},
-					"mode": schema.StringAttribute{
-						Description: "Enables [Smart Placement](https://developers.cloudflare.com/workers/configuration/smart-placement).\nAvailable values: \"smart\".",
-						Optional:    true,
-						Validators: []validator.String{
-							stringvalidator.OneOfCaseInsensitive("smart"),
-						},
 					},
 					"status": schema.StringAttribute{
 						Description: "Status of [Smart Placement](https://developers.cloudflare.com/workers/configuration/smart-placement).\nAvailable values: \"SUCCESS\", \"UNSUPPORTED_APPLICATION\", \"INSUFFICIENT_INVOCATIONS\".",
@@ -721,6 +793,39 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 								"UNSUPPORTED_APPLICATION",
 								"INSUFFICIENT_INVOCATIONS",
 							),
+						},
+					},
+					"region": schema.StringAttribute{
+						Description: "Cloud region for targeted placement in format 'provider:region'.",
+						Computed:    true,
+					},
+					"hostname": schema.StringAttribute{
+						Description: "HTTP hostname for targeted placement.",
+						Computed:    true,
+					},
+					"host": schema.StringAttribute{
+						Description: "TCP host and port for targeted placement.",
+						Computed:    true,
+					},
+					"target": schema.ListNestedAttribute{
+						Description: "Array of placement targets (currently limited to single target).",
+						Computed:    true,
+						CustomType:  customfield.NewNestedObjectListType[WorkersScriptPlacementTargetModel](ctx),
+						NestedObject: schema.NestedAttributeObject{
+							Attributes: map[string]schema.Attribute{
+								"region": schema.StringAttribute{
+									Description: "Cloud region in format 'provider:region'.",
+									Computed:    true,
+								},
+								"hostname": schema.StringAttribute{
+									Description: "HTTP hostname for targeted placement.",
+									Computed:    true,
+								},
+								"host": schema.StringAttribute{
+									Description: "TCP host:port for targeted placement.",
+									Computed:    true,
+								},
+							},
 						},
 					},
 				},

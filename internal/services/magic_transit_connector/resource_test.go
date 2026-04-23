@@ -4,22 +4,75 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"testing"
-
-	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
-	"github.com/hashicorp/terraform-plugin-testing/statecheck"
-	"github.com/hashicorp/terraform-plugin-testing/terraform"
-	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
-
 	"strconv"
+	"testing"
 
 	"github.com/cloudflare/cloudflare-go/v6"
 	"github.com/cloudflare/cloudflare-go/v6/magic_transit"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/acctest"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/consts"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/utils"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
+	"github.com/hashicorp/terraform-plugin-testing/statecheck"
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
+	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 )
+
+func TestMain(m *testing.M) {
+	resource.TestMain(m)
+}
+
+func init() {
+	resource.AddTestSweepers("cloudflare_magic_transit_connector", &resource.Sweeper{
+		Name: "cloudflare_magic_transit_connector",
+		F:    testSweepCloudflareMagicTransitConnectors,
+	})
+}
+
+func testSweepCloudflareMagicTransitConnectors(r string) error {
+	ctx := context.Background()
+	client := acctest.SharedClient()
+
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	if accountID == "" {
+		tflog.Info(ctx, "Skipping magic transit connectors sweep: CLOUDFLARE_ACCOUNT_ID not set")
+		return nil
+	}
+
+	connectors, err := client.MagicTransit.Connectors.List(ctx, magic_transit.ConnectorListParams{
+		AccountID: cloudflare.F(accountID),
+	})
+	if err != nil {
+		tflog.Error(ctx, fmt.Sprintf("Failed to fetch magic transit connectors: %s", err))
+		return fmt.Errorf("failed to fetch magic transit connectors: %w", err)
+	}
+
+	if len(connectors.Result) == 0 {
+		tflog.Info(ctx, "No magic transit connectors to sweep")
+		return nil
+	}
+
+	for _, connector := range connectors.Result {
+		// Use standard filtering helper on the notes field
+		if !utils.ShouldSweepResource(connector.Notes) {
+			continue
+		}
+
+		tflog.Info(ctx, fmt.Sprintf("Deleting magic transit connector: %s (account: %s)", connector.ID, accountID))
+		_, err := client.MagicTransit.Connectors.Delete(ctx, connector.ID, magic_transit.ConnectorDeleteParams{
+			AccountID: cloudflare.F(accountID),
+		})
+		if err != nil {
+			tflog.Error(ctx, fmt.Sprintf("Failed to delete magic transit connector %s: %s", connector.ID, err))
+			continue
+		}
+		tflog.Info(ctx, fmt.Sprintf("Deleted magic transit connector: %s", connector.ID))
+	}
+
+	return nil
+}
 
 func TestAccCloudflareMagicTransitConnectorItWorks(t *testing.T) {
 	resourceName := utils.GenerateRandomResourceName()
@@ -68,8 +121,9 @@ func TestAccCloudflareMagicTransitConnectorItWorks(t *testing.T) {
 						}
 						return fmt.Sprintf("%s/%s", accountID, rs.Primary.ID), nil
 					},
-					ImportState:       true,
-					ImportStateVerify: true,
+					ImportState:             true,
+					ImportStateVerify:       true,
+					ImportStateVerifyIgnore: []string{"license_key", "device.provision_license"}, // License key is only returned on creation
 				},
 				// Update the resource that should cause a in-place update
 				{
@@ -105,6 +159,7 @@ func TestAccCloudflareMagicTransitConnectorItWorks(t *testing.T) {
 		testAccCheckCloudflareMCONNSimple(resourceName, accountID, serialNumber, "true", resourceName, "5", "1"),
 		testAccCheckCloudflareMCONNSimple(resourceName, accountID, serialNumber, "true", "some random notes", "4", "0"),
 		testAccCheckCloudflareMCONNSimpleWithDeviceID(resourceName, accountID, deviceId, "true", resourceName, "5", "1"),
+		testAccCheckCloudflareMCONNSimpleWithProvisionLicense(resourceName, accountID, "true", resourceName, "5", "1"),
 	}
 
 	for _, config := range configurations {
@@ -135,8 +190,9 @@ func TestAccCloudflareMagicTransitConnectorItWorks(t *testing.T) {
 						}
 						return fmt.Sprintf("%s/%s", accountID, rs.Primary.ID), nil
 					},
-					ImportState:       true,
-					ImportStateVerify: true,
+					ImportState:             true,
+					ImportStateVerify:       true,
+					ImportStateVerifyIgnore: []string{"license_key", "device.provision_license"}, // Write-only fields
 				},
 			},
 			CheckDestroy: testAccCheckCloudflareMCONNCheckDestroy(accountID),
@@ -216,4 +272,8 @@ func testAccCheckCloudflareMCONNSimple(name, accountID, serialNumber, activated,
 
 func testAccCheckCloudflareMCONNSimpleWithDeviceID(name, accountID, deviceID, activated, notes, interruptWindowDurationHours, interruptWindowHourOfDay string) string {
 	return acctest.LoadTestCase("basic_with_device_id.tf", name, accountID, deviceID, activated, notes, interruptWindowDurationHours, interruptWindowHourOfDay)
+}
+
+func testAccCheckCloudflareMCONNSimpleWithProvisionLicense(name, accountID, activated, notes, interruptWindowDurationHours, interruptWindowHourOfDay string) string {
+	return acctest.LoadTestCase("basic_with_provision_license.tf", name, accountID, activated, notes, interruptWindowDurationHours, interruptWindowHourOfDay)
 }

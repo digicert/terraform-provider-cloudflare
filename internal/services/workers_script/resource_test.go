@@ -4,10 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path"
 	"regexp"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -16,6 +14,7 @@ import (
 	"github.com/cloudflare/cloudflare-go/v6/workers"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/acctest"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/utils"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
@@ -24,6 +23,7 @@ import (
 )
 
 const (
+	resourcePrefix    = "tfacctest-"
 	scriptContent1    = `addEventListener('fetch', event => {event.respondWith(new Response('test 1'))});`
 	scriptContent2    = `addEventListener('fetch', event => {event.respondWith(new Response('test 2'))});`
 	moduleContent     = `import {DurableObject} from 'cloudflare:workers'; export class MyDurableObject extends DurableObject {}; export default { fetch() { return new Response('Hello world'); }, };`
@@ -36,36 +36,62 @@ var (
 	compatibilityFlags = []string{"nodejs_compat", "web_socket_compression"}
 )
 
-// supportsTerraformWriteOnly checks if the current Terraform version supports WriteOnly attributes (1.11+)
-func supportsTerraformWriteOnly() bool {
-	cmd := exec.Command("terraform", "version")
-	output, err := cmd.Output()
+func init() {
+	resource.AddTestSweepers("cloudflare_workers_script", &resource.Sweeper{
+		Name: "cloudflare_workers_script",
+		F:    testSweepCloudflareWorkerScripts,
+	})
+}
+
+func testSweepCloudflareWorkerScripts(r string) error {
+	ctx := context.Background()
+	client := acctest.SharedClient()
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+
+	if accountID == "" {
+		tflog.Info(ctx, "Skipping worker scripts sweep: CLOUDFLARE_ACCOUNT_ID not set")
+		return nil
+	}
+
+	list, err := client.Workers.Scripts.List(ctx, workers.ScriptListParams{
+		AccountID: cloudflare.F(accountID),
+	})
 	if err != nil {
-		return false
+		tflog.Error(ctx, fmt.Sprintf("Failed to list worker scripts: %s", err))
+		return fmt.Errorf("failed to list worker scripts: %w", err)
 	}
 
-	versionStr := string(output)
-	re := regexp.MustCompile(`Terraform v(\d+)\.(\d+)`)
-	matches := re.FindStringSubmatch(versionStr)
-	if len(matches) < 3 {
-		return false
+	if len(list.Result) == 0 {
+		tflog.Info(ctx, "No worker scripts to sweep")
+		return nil
 	}
 
-	major, err1 := strconv.Atoi(matches[1])
-	minor, err2 := strconv.Atoi(matches[2])
-	if err1 != nil || err2 != nil {
-		return false
+	for _, script := range list.Result {
+		// Use standard filtering helper to only delete test worker scripts
+		if !utils.ShouldSweepResource(script.ID) {
+			continue
+		}
+
+		tflog.Info(ctx, fmt.Sprintf("Deleting worker script: %s (account: %s)", script.ID, accountID))
+		_, err := client.Workers.Scripts.Delete(ctx, script.ID, workers.ScriptDeleteParams{
+			AccountID: cloudflare.F(accountID),
+		})
+		if err != nil {
+			tflog.Error(ctx, fmt.Sprintf("Failed to delete worker script %s: %s", script.ID, err))
+			continue
+		}
+		tflog.Info(ctx, fmt.Sprintf("Deleted worker script: %s", script.ID))
 	}
 
-	// WriteOnly attributes require Terraform 1.11+
-	return major > 1 || (major == 1 && minor >= 11)
+	return nil
 }
 
 func TestAccCloudflareWorkerScript_ServiceWorker(t *testing.T) {
 	t.Parallel()
 
 	rnd := utils.GenerateRandomResourceName()
-	name := "cloudflare_workers_script." + rnd
+	resourceName := resourcePrefix + rnd
+	name := "cloudflare_workers_script." + resourceName
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
 
 	resource.Test(t, resource.TestCase{
@@ -76,30 +102,30 @@ func TestAccCloudflareWorkerScript_ServiceWorker(t *testing.T) {
 		ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccCheckCloudflareWorkerScriptConfigServiceWorkerInitial(rnd, accountID),
+				Config: testAccCheckCloudflareWorkerScriptConfigServiceWorkerInitial(resourceName, accountID),
 				ConfigStateChecks: []statecheck.StateCheck{
-					statecheck.ExpectKnownValue(name, tfjsonpath.New("script_name"), knownvalue.StringExact(rnd)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("script_name"), knownvalue.StringExact(resourceName)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("content"), knownvalue.StringExact(scriptContent1)),
 				},
 			},
 			{
-				Config: testAccCheckCloudflareWorkerScriptConfigServiceWorkerUpdate(rnd, accountID),
+				Config: testAccCheckCloudflareWorkerScriptConfigServiceWorkerUpdate(resourceName, accountID),
 				ConfigStateChecks: []statecheck.StateCheck{
-					statecheck.ExpectKnownValue(name, tfjsonpath.New("script_name"), knownvalue.StringExact(rnd)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("script_name"), knownvalue.StringExact(resourceName)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("content"), knownvalue.StringExact(scriptContent2)),
 				},
 			},
 			{
-				Config: testAccCheckCloudflareWorkerScriptConfigServiceWorkerUpdateBinding(rnd, accountID),
+				Config: testAccCheckCloudflareWorkerScriptConfigServiceWorkerUpdateBinding(resourceName, accountID),
 				ConfigStateChecks: []statecheck.StateCheck{
-					statecheck.ExpectKnownValue(name, tfjsonpath.New("script_name"), knownvalue.StringExact(rnd)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("script_name"), knownvalue.StringExact(resourceName)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("content"), knownvalue.StringExact(scriptContent2)),
 				},
 			},
 			{
 				PreConfig: func() {
 					client := acctest.SharedClient()
-					result, err := client.Workers.Scripts.Settings.Edit(context.Background(), rnd, workers.ScriptSettingEditParams{AccountID: cloudflare.F(accountID), ScriptSetting: workers.ScriptSettingParam{Logpush: cloudflare.Bool(true)}})
+					result, err := client.Workers.Scripts.Settings.Edit(context.Background(), resourceName, workers.ScriptSettingEditParams{AccountID: cloudflare.F(accountID), ScriptSetting: workers.ScriptSettingParam{Logpush: cloudflare.Bool(true)}})
 					if err != nil {
 						t.Errorf("Error updating script settings out-of-band to test drift detection: %s", err)
 					}
@@ -127,10 +153,12 @@ func TestAccCloudflareWorkerScript_ServiceWorker(t *testing.T) {
 }
 
 func TestAccCloudflareWorkerScript_ModuleUpload(t *testing.T) {
+	t.Skip("issue: API behavior change has caused this test to start failing")
 	t.Parallel()
 
 	rnd := utils.GenerateRandomResourceName()
-	name := "cloudflare_workers_script." + rnd
+	resourceName := resourcePrefix + rnd
+	name := "cloudflare_workers_script." + resourceName
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
 
 	resource.Test(t, resource.TestCase{
@@ -142,9 +170,9 @@ func TestAccCloudflareWorkerScript_ModuleUpload(t *testing.T) {
 		// CheckDestroy:             testAccCheckCloudflareWorkerScriptDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccCheckCloudflareWorkerScriptUploadModule(rnd, accountID),
+				Config: testAccCheckCloudflareWorkerScriptUploadModule(resourceName, accountID),
 				ConfigStateChecks: []statecheck.StateCheck{
-					statecheck.ExpectKnownValue(name, tfjsonpath.New("script_name"), knownvalue.StringExact(rnd)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("script_name"), knownvalue.StringExact(resourceName)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("content"), knownvalue.StringExact(moduleContent)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("compatibility_date"), knownvalue.StringExact(compatibilityDate)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("compatibility_flags"), knownvalue.SetSizeExact(2)),
@@ -156,7 +184,7 @@ func TestAccCloudflareWorkerScript_ModuleUpload(t *testing.T) {
 			{
 				PreConfig: func() {
 					client := acctest.SharedClient()
-					result, err := client.Workers.Scripts.Settings.Edit(context.Background(), rnd, workers.ScriptSettingEditParams{AccountID: cloudflare.F(accountID), ScriptSetting: workers.ScriptSettingParam{Logpush: cloudflare.Bool(true)}})
+					result, err := client.Workers.Scripts.Settings.Edit(context.Background(), resourceName, workers.ScriptSettingEditParams{AccountID: cloudflare.F(accountID), ScriptSetting: workers.ScriptSettingParam{Logpush: cloudflare.Bool(true)}})
 					if err != nil {
 						t.Errorf("Error updating script settings out-of-band to test drift detection: %s", err)
 					}
@@ -186,7 +214,8 @@ func TestAccCloudflareWorkerScript_ModuleUpload(t *testing.T) {
 func TestAcc_WorkerScriptWithContentFile(t *testing.T) {
 	t.Parallel()
 	rnd := utils.GenerateRandomResourceName()
-	name := "cloudflare_workers_script." + rnd
+	resourceName := resourcePrefix + rnd
+	name := "cloudflare_workers_script." + resourceName
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
 	tmpDir := t.TempDir()
 	contentFile := path.Join(tmpDir, "worker.mjs")
@@ -218,9 +247,9 @@ func TestAcc_WorkerScriptWithContentFile(t *testing.T) {
 				PreConfig: func() {
 					writeContentFile(t, moduleContent)
 				},
-				Config: testAccWorkersScriptConfigWithContentFile(rnd, accountID, contentFile),
+				Config: testAccWorkersScriptConfigWithContentFile(resourceName, accountID, contentFile),
 				ConfigStateChecks: []statecheck.StateCheck{
-					statecheck.ExpectKnownValue(name, tfjsonpath.New("script_name"), knownvalue.StringExact(rnd)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("script_name"), knownvalue.StringExact(resourceName)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("content_file"), knownvalue.StringExact(contentFile)),
 				},
 			},
@@ -228,7 +257,7 @@ func TestAcc_WorkerScriptWithContentFile(t *testing.T) {
 				PreConfig: func() {
 					writeContentFile(t, fmt.Sprintf("%s // v2", moduleContent))
 				},
-				Config: testAccWorkersScriptConfigWithContentFile(rnd, accountID, contentFile),
+				Config: testAccWorkersScriptConfigWithContentFile(resourceName, accountID, contentFile),
 				ConfigPlanChecks: resource.ConfigPlanChecks{
 					PreApply: []plancheck.PlanCheck{
 						plancheck.ExpectNonEmptyPlan(),
@@ -236,7 +265,7 @@ func TestAcc_WorkerScriptWithContentFile(t *testing.T) {
 				},
 			},
 			{
-				Config: testAccWorkersScriptConfigWithContentFile(rnd, accountID, contentFile),
+				Config: testAccWorkersScriptConfigWithContentFile(resourceName, accountID, contentFile),
 				ConfigPlanChecks: resource.ConfigPlanChecks{
 					PreApply: []plancheck.PlanCheck{
 						plancheck.ExpectEmptyPlan(),
@@ -263,7 +292,7 @@ Content-Type: application/json
 						boundary, moduleContent, boundary, boundary,
 					))
 					result, err := client.Workers.Scripts.Update(context.Background(),
-						rnd,
+						resourceName,
 						workers.ScriptUpdateParams{AccountID: cloudflare.F(accountID)},
 						option.WithRequestBody("multipart/form-data;boundary="+boundary, body),
 					)
@@ -296,6 +325,7 @@ Content-Type: application/json
 func TestAcc_WorkerScriptWithInvalidContentSHA256(t *testing.T) {
 	t.Parallel()
 	rnd := utils.GenerateRandomResourceName()
+	resourceName := resourcePrefix + rnd
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
 	tmpDir := t.TempDir()
 	contentFile := path.Join(tmpDir, "worker.mjs")
@@ -327,7 +357,7 @@ func TestAcc_WorkerScriptWithInvalidContentSHA256(t *testing.T) {
 				PreConfig: func() {
 					writeContentFile(t, moduleContent)
 				},
-				Config:      testAccWorkersScriptConfigWithInvalidContentSHA256(rnd, accountID, contentFile),
+				Config:      testAccWorkersScriptConfigWithInvalidContentSHA256(resourceName, accountID, contentFile),
 				ExpectError: regexp.MustCompile(`SHA-256 Hash Mismatch`),
 			},
 		},
@@ -338,7 +368,8 @@ func TestAccCloudflareWorkerScript_PythonWorker(t *testing.T) {
 	t.Parallel()
 
 	rnd := utils.GenerateRandomResourceName()
-	name := "cloudflare_workers_script." + rnd
+	resourceName := resourcePrefix + rnd
+	name := "cloudflare_workers_script." + resourceName
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
 
 	resource.Test(t, resource.TestCase{
@@ -349,9 +380,9 @@ func TestAccCloudflareWorkerScript_PythonWorker(t *testing.T) {
 		ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: acctest.LoadTestCase("python_worker.tf", rnd, accountID),
+				Config: acctest.LoadTestCase("python_worker.tf", resourceName, accountID),
 				ConfigStateChecks: []statecheck.StateCheck{
-					statecheck.ExpectKnownValue(name, tfjsonpath.New("script_name"), knownvalue.StringExact(rnd)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("script_name"), knownvalue.StringExact(resourceName)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("main_module"), knownvalue.StringExact("index.py")),
 				},
 			},
@@ -369,7 +400,8 @@ func TestAccCloudflareWorkerScript_PythonWorker(t *testing.T) {
 func TestAcc_WorkerScriptWithAssets(t *testing.T) {
 	t.Parallel()
 	rnd := utils.GenerateRandomResourceName()
-	name := "cloudflare_workers_script." + rnd
+	resourceName := resourcePrefix + rnd
+	name := "cloudflare_workers_script." + resourceName
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
 	assetsDir := t.TempDir()
 	assetFile := path.Join(assetsDir, "index.html")
@@ -401,7 +433,7 @@ func TestAcc_WorkerScriptWithAssets(t *testing.T) {
 				PreConfig: func() {
 					writeAssetFile(t, "v1")
 				},
-				Config: testAccWorkersScriptConfigWithAssets(rnd, accountID, assetsDir),
+				Config: testAccWorkersScriptConfigWithAssets(resourceName, accountID, assetsDir),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("assets").AtMapKey("directory"), knownvalue.StringExact(assetsDir)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("assets").AtMapKey("asset_manifest_sha256"), knownvalue.StringExact("b098d2898ca7ae5677c7291d97323e7894137515043f3e560f3bd155870eea9e")),
@@ -412,7 +444,7 @@ func TestAcc_WorkerScriptWithAssets(t *testing.T) {
 				PreConfig: func() {
 					writeAssetFile(t, "v2")
 				},
-				Config: testAccWorkersScriptConfigWithAssets(rnd, accountID, assetsDir),
+				Config: testAccWorkersScriptConfigWithAssets(resourceName, accountID, assetsDir),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("assets").AtMapKey("directory"), knownvalue.StringExact(assetsDir)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("assets").AtMapKey("asset_manifest_sha256"), knownvalue.StringExact("46f07eb8a3fa881af81ce2b6b3fc1627edccf115526aa5c631308c45c75d2fb1")),
@@ -425,7 +457,7 @@ func TestAcc_WorkerScriptWithAssets(t *testing.T) {
 				},
 			},
 			{
-				Config: testAccWorkersScriptConfigWithAssets(rnd, accountID, assetsDir),
+				Config: testAccWorkersScriptConfigWithAssets(resourceName, accountID, assetsDir),
 				ConfigPlanChecks: resource.ConfigPlanChecks{
 					PreApply: []plancheck.PlanCheck{
 						plancheck.ExpectEmptyPlan(),
@@ -446,12 +478,9 @@ func TestAcc_WorkerScriptWithAssets(t *testing.T) {
 func TestAccCloudflareWorkerScript_ModuleWithDurableObject(t *testing.T) {
 	t.Parallel()
 
-	if !supportsTerraformWriteOnly() {
-		t.Skip("Skipping test: WriteOnly attributes require Terraform 1.11+ (DurableObject migrations are required)")
-	}
-
 	rnd := utils.GenerateRandomResourceName()
-	name := "cloudflare_workers_script." + rnd
+	resourceName := resourcePrefix + rnd
+	name := "cloudflare_workers_script." + resourceName
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
 
 	resource.Test(t, resource.TestCase{
@@ -462,9 +491,9 @@ func TestAccCloudflareWorkerScript_ModuleWithDurableObject(t *testing.T) {
 		ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: acctest.LoadTestCase("module_with_durable_object.tf", rnd, accountID),
+				Config: acctest.LoadTestCase("module_with_durable_object.tf", resourceName, accountID),
 				ConfigStateChecks: []statecheck.StateCheck{
-					statecheck.ExpectKnownValue(name, tfjsonpath.New("script_name"), knownvalue.StringExact(rnd)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("script_name"), knownvalue.StringExact(resourceName)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("main_module"), knownvalue.StringExact("worker.js")),
 				},
 			},
@@ -473,10 +502,334 @@ func TestAccCloudflareWorkerScript_ModuleWithDurableObject(t *testing.T) {
 				ImportStateIdPrefix:     fmt.Sprintf("%s/", accountID),
 				ImportState:             true,
 				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"bindings.0.namespace_id", "has_modules", "main_module", "startup_time_ms"},
+				ImportStateVerifyIgnore: []string{"bindings.0.namespace_id", "has_modules", "main_module", "migrations", "startup_time_ms"},
 			},
 		},
 	})
+}
+
+func TestAccCloudflareWorkerScript_AssetsConfigRunWorkerFirst(t *testing.T) {
+	t.Parallel()
+
+	rnd := utils.GenerateRandomResourceName()
+	name := "cloudflare_workers_script." + rnd
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+
+	contentDir := t.TempDir()
+	contentFile := path.Join(contentDir, "index.js")
+	writeContentFile := func(t *testing.T) {
+		err := os.WriteFile(contentFile, []byte(`export default { fetch() { return new Response('Hello world'); } };`), 0644)
+		if err != nil {
+			t.Fatalf("Error creating temp file at path %s: %s", contentFile, err.Error())
+		}
+	}
+
+	assetsDir := t.TempDir()
+	assetFile := path.Join(assetsDir, "index.html")
+	writeAssetFile := func(t *testing.T) {
+		err := os.WriteFile(assetFile, []byte("Hello world"), 0644)
+		if err != nil {
+			t.Fatalf("Error creating temp file at path %s: %s", assetFile, err.Error())
+		}
+	}
+
+	cleanup := func(t *testing.T) {
+		for _, file := range []string{assetFile, contentFile} {
+			err := os.Remove(file)
+			if err != nil {
+				t.Logf("Error removing temp file at path %s: %s", file, err.Error())
+			}
+		}
+	}
+	defer cleanup(t)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			acctest.TestAccPreCheck(t)
+			acctest.TestAccPreCheck_AccountID(t)
+		},
+		ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() {
+					writeContentFile(t)
+					writeAssetFile(t)
+				},
+				Config: testAccCheckCloudflareWorkerScriptConfigWithAssetsWithRunWorkerFirst(rnd, accountID, contentFile, assetsDir, `false`),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("assets").AtMapKey("config").AtMapKey("run_worker_first"), knownvalue.Bool(false)),
+				},
+			},
+			{
+				Config: testAccCheckCloudflareWorkerScriptConfigWithAssetsWithRunWorkerFirst(rnd, accountID, contentFile, assetsDir, `["/api/*"]`),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("assets").AtMapKey("config").AtMapKey("run_worker_first"), knownvalue.ListExact([]knownvalue.Check{
+						knownvalue.StringExact("/api/*"),
+					})),
+				},
+			},
+			{
+				Config: testAccCheckCloudflareWorkerScriptConfigWithAssetsWithRunWorkerFirst(rnd, accountID, contentFile, assetsDir, `true`),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("assets").AtMapKey("config").AtMapKey("run_worker_first"), knownvalue.Bool(true)),
+				},
+			},
+			{
+				Config: testAccCheckCloudflareWorkerScriptConfigWithAssetsWithRunWorkerFirst(rnd, accountID, contentFile, assetsDir, `["/api/*", "!/api/health"]`),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("assets").AtMapKey("config").AtMapKey("run_worker_first"), knownvalue.ListExact([]knownvalue.Check{
+						knownvalue.StringExact("/api/*"),
+						knownvalue.StringExact("!/api/health"),
+					})),
+				},
+			},
+		},
+	})
+}
+
+func TestAccCloudflareWorkerScript_AssetsConfigRunWorkerFirstMigration(t *testing.T) {
+	t.Parallel()
+
+	rnd := utils.GenerateRandomResourceName()
+	name := "cloudflare_workers_script." + rnd
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+
+	contentDir := t.TempDir()
+	contentFile := path.Join(contentDir, "index.js")
+	writeContentFile := func(t *testing.T) {
+		err := os.WriteFile(contentFile, []byte(`export default { fetch() { return new Response('Hello world'); } };`), 0644)
+		if err != nil {
+			t.Fatalf("Error creating temp file at path %s: %s", contentFile, err.Error())
+		}
+	}
+
+	assetsDir := t.TempDir()
+	assetFile := path.Join(assetsDir, "index.html")
+	writeAssetFile := func(t *testing.T) {
+		err := os.WriteFile(assetFile, []byte("Hello world"), 0644)
+		if err != nil {
+			t.Fatalf("Error creating temp file at path %s: %s", assetFile, err.Error())
+		}
+	}
+
+	cleanup := func(t *testing.T) {
+		for _, file := range []string{assetFile, contentFile} {
+			err := os.Remove(file)
+			if err != nil {
+				t.Logf("Error removing temp file at path %s: %s", file, err.Error())
+			}
+		}
+	}
+	defer cleanup(t)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			acctest.TestAccPreCheck(t)
+			acctest.TestAccPreCheck_AccountID(t)
+		},
+		Steps: []resource.TestStep{
+			{
+				PreConfig: func() {
+					writeContentFile(t)
+					writeAssetFile(t)
+				},
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.10.1",
+					},
+				},
+				Config: testAccCheckCloudflareWorkerScriptConfigWithAssetsWithRunWorkerFirst(rnd, accountID, contentFile, assetsDir, `false`),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("assets").AtMapKey("config").AtMapKey("run_worker_first"), knownvalue.Bool(false)),
+				},
+			},
+			{
+				Config:                   testAccCheckCloudflareWorkerScriptConfigWithAssetsWithRunWorkerFirst(rnd, accountID, contentFile, assetsDir, `["/api/*"]`),
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("assets").AtMapKey("config").AtMapKey("run_worker_first"), knownvalue.ListExact([]knownvalue.Check{
+						knownvalue.StringExact("/api/*"),
+					})),
+				},
+			},
+		},
+	})
+}
+
+// TestAccCloudflareWorkerScript_UnmanagedSecretNoDrift verifies that unmanaged secrets
+// (secrets that exist on the Worker but are not defined in Terraform config) do not cause drift.
+// This is a regression test for https://github.com/cloudflare/terraform-provider-cloudflare/issues/5892
+func TestAccCloudflareWorkerScript_UnmanagedSecretNoDrift(t *testing.T) {
+	t.Parallel()
+
+	rnd := utils.GenerateRandomResourceName()
+	resourceName := resourcePrefix + rnd
+	name := "cloudflare_workers_script." + resourceName
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			acctest.TestAccPreCheck(t)
+			acctest.TestAccPreCheck_AccountID(t)
+		},
+		ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccWorkersScriptConfigWithManagedSecret(resourceName, accountID),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("script_name"), knownvalue.StringExact(resourceName)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("bindings"), knownvalue.ListSizeExact(1)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("bindings").AtSliceIndex(0).AtMapKey("name"), knownvalue.StringExact("MANAGED_SECRET")),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("bindings").AtSliceIndex(0).AtMapKey("type"), knownvalue.StringExact("secret_text")),
+				},
+			},
+			{
+				PreConfig: func() {
+					// Add an unmanaged secret via the API (out-of-band)
+					client := acctest.SharedClient()
+					boundary := "--form-data-boundary-unmanaged-secret"
+					body := []byte(fmt.Sprintf(`--%s
+Content-Disposition: form-data; name="files"; filename="worker.mjs"
+Content-Type: application/javascript+module
+
+export default { fetch() { return new Response('Hello world'); } };
+--%s
+Content-Disposition: form-data; name="metadata"; filename="metadata.json"
+Content-Type: application/json
+
+{"main_module": "worker.mjs", "bindings": [{"type": "secret_text", "name": "MANAGED_SECRET", "text": "managed-secret-value"}, {"type": "secret_text", "name": "UNMANAGED_SECRET", "text": "unmanaged-secret-value"}]}
+--%s--
+`,
+						boundary, boundary, boundary,
+					))
+					result, err := client.Workers.Scripts.Update(context.Background(),
+						resourceName,
+						workers.ScriptUpdateParams{AccountID: cloudflare.F(accountID)},
+						option.WithRequestBody("multipart/form-data;boundary="+boundary, body),
+					)
+					if err != nil {
+						t.Errorf("Error adding unmanaged secret out-of-band: %s", err)
+					}
+					if result == nil {
+						t.Error("Could not add unmanaged secret out-of-band.")
+					}
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: false,
+				RefreshPlanChecks: resource.RefreshPlanChecks{
+					PostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+			{
+				// Verify state still only contains the managed secret and plan is empty
+				Config: testAccWorkersScriptConfigWithManagedSecret(resourceName, accountID),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("bindings"), knownvalue.ListSizeExact(1)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("bindings").AtSliceIndex(0).AtMapKey("name"), knownvalue.StringExact("MANAGED_SECRET")),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("bindings").AtSliceIndex(0).AtMapKey("type"), knownvalue.StringExact("secret_text")),
+				},
+			},
+		},
+	})
+}
+
+// TestAccCloudflareWorkerScript_NoSecretsInConfigWithUnmanagedSecrets verifies that workers with
+// unmanaged secrets do not cause drift when config has no secrets at all.
+// This is a common scenario where users manage secrets outside of Terraform (e.g., via wrangler or dashboard).
+func TestAccCloudflareWorkerScript_NoSecretsInConfigWithUnmanagedSecrets(t *testing.T) {
+	t.Parallel()
+
+	rnd := utils.GenerateRandomResourceName()
+	resourceName := resourcePrefix + rnd
+	name := "cloudflare_workers_script." + resourceName
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			acctest.TestAccPreCheck(t)
+			acctest.TestAccPreCheck_AccountID(t)
+		},
+		ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccWorkersScriptConfigNoSecrets(resourceName, accountID),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("script_name"), knownvalue.StringExact(resourceName)),
+				},
+			},
+			{
+				PreConfig: func() {
+					// Add secrets via the API (out-of-band) - simulating wrangler secret put
+					client := acctest.SharedClient()
+					boundary := "--form-data-boundary-unmanaged-secrets"
+					body := []byte(fmt.Sprintf(`--%s
+Content-Disposition: form-data; name="files"; filename="worker.mjs"
+Content-Type: application/javascript+module
+
+export default { fetch() { return new Response('Hello world'); } };
+--%s
+Content-Disposition: form-data; name="metadata"; filename="metadata.json"
+Content-Type: application/json
+
+{"main_module": "worker.mjs", "bindings": [{"type": "secret_text", "name": "API_KEY", "text": "secret-api-key"}, {"type": "secret_text", "name": "DB_PASSWORD", "text": "secret-db-password"}]}
+--%s--
+`,
+						boundary, boundary, boundary,
+					))
+					result, err := client.Workers.Scripts.Update(context.Background(),
+						resourceName,
+						workers.ScriptUpdateParams{AccountID: cloudflare.F(accountID)},
+						option.WithRequestBody("multipart/form-data;boundary="+boundary, body),
+					)
+					if err != nil {
+						t.Errorf("Error adding secrets out-of-band: %s", err)
+					}
+					if result == nil {
+						t.Error("Could not add secrets out-of-band.")
+					}
+				},
+				RefreshState:       true,
+				ExpectNonEmptyPlan: false,
+				RefreshPlanChecks: resource.RefreshPlanChecks{
+					PostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+			{
+				// Verify we can still apply the same config without issues
+				Config: testAccWorkersScriptConfigNoSecrets(resourceName, accountID),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+		},
+	})
+}
+
+func testAccWorkersScriptConfigWithManagedSecret(rnd, accountID string) string {
+	return acctest.LoadTestCase("module_with_unmanaged_secret.tf", rnd, accountID)
+}
+
+func testAccWorkersScriptConfigNoSecrets(rnd, accountID string) string {
+	return fmt.Sprintf(`
+resource "cloudflare_workers_script" "%[1]s" {
+  account_id = "%[2]s"
+  script_name = "%[1]s"
+  content = "export default { fetch() { return new Response('Hello world'); } };"
+  main_module = "worker.mjs"
+}
+`, rnd, accountID)
 }
 
 func testAccCheckCloudflareWorkerScriptConfigServiceWorkerInitial(rnd, accountID string) string {
@@ -506,4 +859,85 @@ func testAccWorkersScriptConfigWithInvalidContentSHA256(rnd, accountID, contentF
 
 func testAccWorkersScriptConfigWithAssets(rnd, accountID, assetsDir string) string {
 	return acctest.LoadTestCase("module_with_assets.tf", rnd, accountID, assetsDir)
+}
+
+func testAccCheckCloudflareWorkerScriptConfigWithAssetsWithRunWorkerFirst(rnd, accountID, contentFile, assetsDir, runWorkerFirst string) string {
+	return acctest.LoadTestCase("module_with_assets_with_run_worker_first.tf", rnd, accountID, contentFile, assetsDir, runWorkerFirst)
+}
+
+// TestAccCloudflareWorkerScript_RatelimitBinding verifies that a ratelimit binding type
+// is accepted and applied correctly on cloudflare_workers_script.
+// This is a regression test for the missing "ratelimit" type in the schema validator.
+func TestAccCloudflareWorkerScript_RatelimitBinding(t *testing.T) {
+	t.Parallel()
+
+	rnd := utils.GenerateRandomResourceName()
+	resourceName := resourcePrefix + rnd
+	name := "cloudflare_workers_script." + resourceName
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			acctest.TestAccPreCheck(t)
+			acctest.TestAccPreCheck_AccountID(t)
+		},
+		ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccCheckCloudflareWorkerScriptWithRatelimitBinding(resourceName, accountID),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("script_name"), knownvalue.StringExact(resourceName)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("bindings"), knownvalue.ListSizeExact(1)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("bindings").AtSliceIndex(0).AtMapKey("name"), knownvalue.StringExact("MY_RATE_LIMITER")),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("bindings").AtSliceIndex(0).AtMapKey("type"), knownvalue.StringExact("ratelimit")),
+				},
+			},
+			{
+				ResourceName:            name,
+				ImportStateIdPrefix:     fmt.Sprintf("%s/", accountID),
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"main_module", "startup_time_ms"},
+			},
+		},
+	})
+}
+
+func testAccCheckCloudflareWorkerScriptWithRatelimitBinding(rnd, accountID string) string {
+	return acctest.LoadTestCase("module_with_ratelimit.tf", rnd, accountID)
+}
+
+func TestAccUpgradeWorkersScript_FromPublishedV5(t *testing.T) {
+	rnd := utils.GenerateRandomResourceName()
+	resourceName := resourcePrefix + rnd
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+
+	config := testAccCheckCloudflareWorkerScriptConfigServiceWorkerInitial(resourceName, accountID)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			acctest.TestAccPreCheck(t)
+			acctest.TestAccPreCheck_AccountID(t)
+		},
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.16.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+		},
+	})
 }

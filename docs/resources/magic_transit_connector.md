@@ -20,7 +20,9 @@ resource "cloudflare_magic_transit_connector" "example_magic_transit_connector" 
     serial_number = "serial_number"
   }
   activated = true
-  interrupt_window_duration_hours = 0
+  interrupt_window_days_of_week = ["Sunday"]
+  interrupt_window_duration_hours = 1
+  interrupt_window_embargo_dates = ["string"]
   interrupt_window_hour_of_day = 0
   notes = "notes"
   timezone = "timezone"
@@ -46,6 +48,7 @@ resource "cloudflare_magic_transit_connector" "example_magic_transit_connector" 
 ### Read-Only
 
 - `id` (String) The ID of this resource.
+- `license_key` (String, Sensitive) License key for the connector. This is only returned on creation and will not be available in subsequent reads.
 
 <a id="nestedatt--device"></a>
 ### Nested Schema for `device`
@@ -53,6 +56,7 @@ resource "cloudflare_magic_transit_connector" "example_magic_transit_connector" 
 Optional:
 
 - `id` (String)
+- `provision_license` (Boolean) Set to true to provision a license key for this connector. Only used during resource creation. This is a write-only field that will not be stored in state.
 - `serial_number` (String)
 
 ## Import
@@ -62,3 +66,5 @@ Import is supported using the following syntax:
 ```shell
 $ terraform import cloudflare_magic_transit_connector.example '<account_id>/<connector_id>'
 ```
+
+

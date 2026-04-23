@@ -40,6 +40,7 @@ Read-Only:
 - `consumers` (Attributes List) (see [below for nested schema](#nestedatt--result--consumers))
 - `consumers_total_count` (Number)
 - `created_on` (String)
+- `id` (String)
 - `modified_on` (String)
 - `producers` (Attributes List) (see [below for nested schema](#nestedatt--result--producers))
 - `producers_total_count` (Number)
@@ -54,8 +55,8 @@ Read-Only:
 
 - `consumer_id` (String) A Resource identifier.
 - `created_on` (String)
-- `queue_id` (String) A Resource identifier.
-- `script` (String) Name of a Worker
+- `dead_letter_queue` (String) Name of the dead letter queue, or empty string if not configured
+- `queue_name` (String)
 - `script_name` (String) Name of a Worker
 - `settings` (Attributes) (see [below for nested schema](#nestedatt--result--consumers--settings))
 - `type` (String) Available values: "worker", "http_pull".

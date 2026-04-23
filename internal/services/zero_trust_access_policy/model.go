@@ -22,6 +22,8 @@ type ZeroTrustAccessPolicyModel struct {
 	PurposeJustificationPrompt   types.String                                                   `tfsdk:"purpose_justification_prompt" json:"purpose_justification_prompt,optional"`
 	PurposeJustificationRequired types.Bool                                                     `tfsdk:"purpose_justification_required" json:"purpose_justification_required,optional"`
 	ApprovalGroups               *[]*ZeroTrustAccessPolicyApprovalGroupsModel                   `tfsdk:"approval_groups" json:"approval_groups,optional"`
+	ConnectionRules              *ZeroTrustAccessPolicyConnectionRulesModel                     `tfsdk:"connection_rules" json:"connection_rules,optional"`
+	MfaConfig                    *ZeroTrustAccessPolicyMfaConfigModel                           `tfsdk:"mfa_config" json:"mfa_config,optional"`
 	SessionDuration              types.String                                                   `tfsdk:"session_duration" json:"session_duration,computed_optional"`
 	Exclude                      customfield.NestedObjectSet[ZeroTrustAccessPolicyExcludeModel] `tfsdk:"exclude" json:"exclude,computed_optional"`
 	Include                      customfield.NestedObjectSet[ZeroTrustAccessPolicyIncludeModel] `tfsdk:"include" json:"include,computed_optional"`
@@ -40,6 +42,21 @@ type ZeroTrustAccessPolicyApprovalGroupsModel struct {
 	ApprovalsNeeded types.Float64   `tfsdk:"approvals_needed" json:"approvals_needed,required"`
 	EmailAddresses  *[]types.String `tfsdk:"email_addresses" json:"email_addresses,optional"`
 	EmailListUUID   types.String    `tfsdk:"email_list_uuid" json:"email_list_uuid,optional"`
+}
+
+type ZeroTrustAccessPolicyConnectionRulesModel struct {
+	RDP *ZeroTrustAccessPolicyConnectionRulesRDPModel `tfsdk:"rdp" json:"rdp,optional"`
+}
+
+type ZeroTrustAccessPolicyConnectionRulesRDPModel struct {
+	AllowedClipboardLocalToRemoteFormats *[]types.String `tfsdk:"allowed_clipboard_local_to_remote_formats" json:"allowed_clipboard_local_to_remote_formats,optional"`
+	AllowedClipboardRemoteToLocalFormats *[]types.String `tfsdk:"allowed_clipboard_remote_to_local_formats" json:"allowed_clipboard_remote_to_local_formats,optional"`
+}
+
+type ZeroTrustAccessPolicyMfaConfigModel struct {
+	AllowedAuthenticators *[]types.String `tfsdk:"allowed_authenticators" json:"allowed_authenticators,optional"`
+	MfaDisabled           types.Bool      `tfsdk:"mfa_disabled" json:"mfa_disabled,optional"`
+	SessionDuration       types.String    `tfsdk:"session_duration" json:"session_duration,optional"`
 }
 
 type ZeroTrustAccessPolicyExcludeModel struct {
@@ -67,6 +84,7 @@ type ZeroTrustAccessPolicyExcludeModel struct {
 	OIDC                 *ZeroTrustAccessPolicyExcludeOIDCModel                 `tfsdk:"oidc" json:"oidc,optional"`
 	ServiceToken         *ZeroTrustAccessPolicyExcludeServiceTokenModel         `tfsdk:"service_token" json:"service_token,optional"`
 	LinkedAppToken       *ZeroTrustAccessPolicyExcludeLinkedAppTokenModel       `tfsdk:"linked_app_token" json:"linked_app_token,optional"`
+	UserRiskScore        *ZeroTrustAccessPolicyExcludeUserRiskScoreModel        `tfsdk:"user_risk_score" json:"user_risk_score,optional"`
 }
 
 type ZeroTrustAccessPolicyExcludeGroupModel struct {
@@ -174,6 +192,10 @@ type ZeroTrustAccessPolicyExcludeLinkedAppTokenModel struct {
 	AppUID types.String `tfsdk:"app_uid" json:"app_uid,required"`
 }
 
+type ZeroTrustAccessPolicyExcludeUserRiskScoreModel struct {
+	UserRiskScore *[]types.String `tfsdk:"user_risk_score" json:"user_risk_score,required"`
+}
+
 type ZeroTrustAccessPolicyIncludeModel struct {
 	Group                *ZeroTrustAccessPolicyIncludeGroupModel                `tfsdk:"group" json:"group,optional"`
 	AnyValidServiceToken *ZeroTrustAccessPolicyIncludeAnyValidServiceTokenModel `tfsdk:"any_valid_service_token" json:"any_valid_service_token,optional"`
@@ -199,6 +221,7 @@ type ZeroTrustAccessPolicyIncludeModel struct {
 	OIDC                 *ZeroTrustAccessPolicyIncludeOIDCModel                 `tfsdk:"oidc" json:"oidc,optional"`
 	ServiceToken         *ZeroTrustAccessPolicyIncludeServiceTokenModel         `tfsdk:"service_token" json:"service_token,optional"`
 	LinkedAppToken       *ZeroTrustAccessPolicyIncludeLinkedAppTokenModel       `tfsdk:"linked_app_token" json:"linked_app_token,optional"`
+	UserRiskScore        *ZeroTrustAccessPolicyIncludeUserRiskScoreModel        `tfsdk:"user_risk_score" json:"user_risk_score,optional"`
 }
 
 type ZeroTrustAccessPolicyIncludeGroupModel struct {
@@ -306,6 +329,10 @@ type ZeroTrustAccessPolicyIncludeLinkedAppTokenModel struct {
 	AppUID types.String `tfsdk:"app_uid" json:"app_uid,required"`
 }
 
+type ZeroTrustAccessPolicyIncludeUserRiskScoreModel struct {
+	UserRiskScore *[]types.String `tfsdk:"user_risk_score" json:"user_risk_score,required"`
+}
+
 type ZeroTrustAccessPolicyRequireModel struct {
 	Group                *ZeroTrustAccessPolicyRequireGroupModel                `tfsdk:"group" json:"group,optional"`
 	AnyValidServiceToken *ZeroTrustAccessPolicyRequireAnyValidServiceTokenModel `tfsdk:"any_valid_service_token" json:"any_valid_service_token,optional"`
@@ -331,6 +358,7 @@ type ZeroTrustAccessPolicyRequireModel struct {
 	OIDC                 *ZeroTrustAccessPolicyRequireOIDCModel                 `tfsdk:"oidc" json:"oidc,optional"`
 	ServiceToken         *ZeroTrustAccessPolicyRequireServiceTokenModel         `tfsdk:"service_token" json:"service_token,optional"`
 	LinkedAppToken       *ZeroTrustAccessPolicyRequireLinkedAppTokenModel       `tfsdk:"linked_app_token" json:"linked_app_token,optional"`
+	UserRiskScore        *ZeroTrustAccessPolicyRequireUserRiskScoreModel        `tfsdk:"user_risk_score" json:"user_risk_score,optional"`
 }
 
 type ZeroTrustAccessPolicyRequireGroupModel struct {
@@ -436,4 +464,8 @@ type ZeroTrustAccessPolicyRequireServiceTokenModel struct {
 
 type ZeroTrustAccessPolicyRequireLinkedAppTokenModel struct {
 	AppUID types.String `tfsdk:"app_uid" json:"app_uid,required"`
+}
+
+type ZeroTrustAccessPolicyRequireUserRiskScoreModel struct {
+	UserRiskScore *[]types.String `tfsdk:"user_risk_score" json:"user_risk_score,required"`
 }

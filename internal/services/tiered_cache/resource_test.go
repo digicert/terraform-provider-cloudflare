@@ -11,6 +11,7 @@ import (
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/acctest"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/consts"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/utils"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
@@ -18,6 +19,26 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 )
+
+func TestMain(m *testing.M) {
+	resource.TestMain(m)
+}
+
+func init() {
+	resource.AddTestSweepers("cloudflare_tiered_cache", &resource.Sweeper{
+		Name: "cloudflare_tiered_cache",
+		F:    testSweepCloudflareTieredCache,
+	})
+}
+
+func testSweepCloudflareTieredCache(r string) error {
+	ctx := context.Background()
+	// Tiered Cache is a zone-level configuration setting.
+	// It's a singleton setting per zone, not something that accumulates.
+	// No sweeping required.
+	tflog.Info(ctx, "Tiered Cache doesn't require sweeping (zone setting)")
+	return nil
+}
 
 func testTieredCacheConfig(rnd, zoneID string) string {
 	return acctest.LoadTestCase("tieredcacheconfig.tf", rnd, zoneID)
@@ -251,6 +272,37 @@ func TestAccCloudflareTieredCache_Smart(t *testing.T) {
 				ResourceName:      resourceName,
 				ImportState:       true,
 				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
+func TestAccUpgradeTieredCache_FromPublishedV5(t *testing.T) {
+	rnd := utils.GenerateRandomResourceName()
+	zoneID := os.Getenv("CLOUDFLARE_ZONE_ID")
+
+	config := testTieredCacheConfigOn(rnd, zoneID)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() { acctest.TestAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.16.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
 			},
 		},
 	})

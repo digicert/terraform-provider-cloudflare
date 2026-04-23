@@ -113,7 +113,7 @@ func (r *EmailRoutingSettingsResource) Read(ctx context.Context, req resource.Re
 	_, err := r.client.EmailRouting.Get(
 		ctx,
 		email_routing.EmailRoutingGetParams{
-			ZoneID: cloudflare.F(data.ID.ValueString()),
+			ZoneID: cloudflare.F(data.ZoneID.ValueString()),
 		},
 		option.WithResponseBodyInto(&res),
 		option.WithMiddleware(logging.Middleware(ctx)),
@@ -150,7 +150,7 @@ func (r *EmailRoutingSettingsResource) Delete(ctx context.Context, req resource.
 	_, err := r.client.EmailRouting.Disable(
 		ctx,
 		email_routing.EmailRoutingDisableParams{
-			ZoneID: cloudflare.F(data.ID.ValueString()),
+			ZoneID: cloudflare.F(data.ZoneID.ValueString()),
 		},
 		option.WithMiddleware(logging.Middleware(ctx)),
 	)
@@ -163,7 +163,7 @@ func (r *EmailRoutingSettingsResource) Delete(ctx context.Context, req resource.
 }
 
 func (r *EmailRoutingSettingsResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	var data *EmailRoutingSettingsModel = new(EmailRoutingSettingsModel)
+	var data = new(EmailRoutingSettingsModel)
 
 	path := ""
 	diags := importpath.ParseImportID(

@@ -30,9 +30,11 @@ resource "cloudflare_account_member" "example_account_member" {
 
 ### Optional
 
-- `policies` (Attributes List) Array of policies associated with this member. (see [below for nested schema](#nestedatt--policies))
-- `roles` (List of String) Array of roles associated with this member.
-- `status` (String) Available values: "accepted", "pending".
+- `policies` (Attributes Set) Array of policies associated with this member. (see [below for nested schema](#nestedatt--policies))
+- `roles` (Set of String) Set of roles associated with this member.
+- `status` (String) Status of the member invitation. If not provided during creation, defaults to 'pending'.
+Changing from 'accepted' back to 'pending' will trigger a replacement of the member resource in Terraform.
+Available values: "accepted", "pending".
 
 ### Read-Only
 
@@ -46,12 +48,8 @@ Required:
 
 - `access` (String) Allow or deny operations against the resources.
 Available values: "allow", "deny".
-- `permission_groups` (Attributes List) A set of permission groups that are specified to the policy. (see [below for nested schema](#nestedatt--policies--permission_groups))
-- `resource_groups` (Attributes List) A list of resource groups that the policy applies to. (see [below for nested schema](#nestedatt--policies--resource_groups))
-
-Read-Only:
-
-- `id` (String) Policy identifier.
+- `permission_groups` (Attributes Set) A set of permission groups that are specified to the policy. (see [below for nested schema](#nestedatt--policies--permission_groups))
+- `resource_groups` (Attributes Set) A list of resource groups that the policy applies to. (see [below for nested schema](#nestedatt--policies--resource_groups))
 
 <a id="nestedatt--policies--permission_groups"></a>
 ### Nested Schema for `policies.permission_groups`
@@ -88,3 +86,5 @@ Import is supported using the following syntax:
 ```shell
 $ terraform import cloudflare_account_member.example '<account_id>/<member_id>'
 ```
+
+

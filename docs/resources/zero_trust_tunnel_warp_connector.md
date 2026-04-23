@@ -15,6 +15,7 @@ description: |-
 resource "cloudflare_zero_trust_tunnel_warp_connector" "example_zero_trust_tunnel_warp_connector" {
   account_id = "699d98642c564d2e855e9661899b7252"
   name = "blog"
+  ha = true
 }
 ```
 
@@ -28,13 +29,12 @@ resource "cloudflare_zero_trust_tunnel_warp_connector" "example_zero_trust_tunne
 
 ### Optional
 
+- `ha` (Boolean) Indicates that the tunnel will be created to be highly available. If omitted, defaults to false.
 - `tunnel_secret` (String, Sensitive) Sets the password required to run a locally-managed tunnel. Must be at least 32 bytes and encoded as a base64 string.
 
 ### Read-Only
 
 - `account_tag` (String) Cloudflare account ID
-- `config_src` (String) Indicates if this is a locally or remotely configured tunnel. If `local`, manage the tunnel using a YAML file on the origin machine. If `cloudflare`, manage the tunnel on the Zero Trust dashboard.
-Available values: "local", "cloudflare".
 - `connections` (Attributes List, Deprecated) The Cloudflare Tunnel connections between your origin and Cloudflare's edge. (see [below for nested schema](#nestedatt--connections))
 - `conns_active_at` (String) Timestamp of when the tunnel established at least one connection to Cloudflare's edge. If `null`, the tunnel is inactive.
 - `conns_inactive_at` (String) Timestamp of when the tunnel became inactive (no connections to Cloudflare's edge). If `null`, the tunnel is active.
@@ -42,7 +42,6 @@ Available values: "local", "cloudflare".
 - `deleted_at` (String) Timestamp of when the resource was deleted. If `null`, the resource has not been deleted.
 - `id` (String) UUID of the tunnel.
 - `metadata` (String) Metadata associated with the tunnel.
-- `remote_config` (Boolean, Deprecated) If `true`, the tunnel can be configured remotely from the Zero Trust dashboard. If `false`, the tunnel must be configured locally on the origin machine.
 - `status` (String) The status of the tunnel. Valid values are `inactive` (tunnel has never been run), `degraded` (tunnel is active and able to serve traffic but in an unhealthy state), `healthy` (tunnel is active and able to serve traffic), or `down` (tunnel can not serve traffic as it has no connections to the Cloudflare Edge).
 Available values: "inactive", "degraded", "healthy", "down".
 - `tun_type` (String) The type of tunnel.
@@ -69,3 +68,5 @@ Import is supported using the following syntax:
 ```shell
 $ terraform import cloudflare_zero_trust_tunnel_warp_connector.example '<account_id>/<tunnel_id>'
 ```
+
+

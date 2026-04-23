@@ -24,9 +24,6 @@ data "cloudflare_zero_trust_dlp_custom_entry" "example_zero_trust_dlp_custom_ent
 ### Required
 
 - `account_id` (String)
-
-### Optional
-
 - `entry_id` (String)
 
 ### Read-Only
@@ -36,14 +33,17 @@ Determines if the words should be matched in a case-sensitive manner
 Cannot be set to false if secret is true
 - `confidence` (Attributes) (see [below for nested schema](#nestedatt--confidence))
 - `created_at` (String)
+- `description` (String)
 - `enabled` (Boolean)
 - `id` (String) The ID of this resource.
 - `name` (String)
 - `pattern` (Attributes) (see [below for nested schema](#nestedatt--pattern))
 - `profile_id` (String)
+- `profiles` (Attributes List) (see [below for nested schema](#nestedatt--profiles))
 - `secret` (Boolean)
 - `type` (String) Available values: "custom", "predefined", "integration", "exact_data", "document_fingerprint", "word_list".
 - `updated_at` (String)
+- `upload_status` (String) Available values: "empty", "uploading", "pending", "processing", "failed", "complete".
 - `variant` (Attributes) (see [below for nested schema](#nestedatt--variant))
 - `word_list` (String)
 
@@ -63,6 +63,15 @@ Read-Only:
 
 - `regex` (String)
 - `validation` (String, Deprecated) Available values: "luhn".
+
+
+<a id="nestedatt--profiles"></a>
+### Nested Schema for `profiles`
+
+Read-Only:
+
+- `id` (String)
+- `name` (String)
 
 
 <a id="nestedatt--variant"></a>

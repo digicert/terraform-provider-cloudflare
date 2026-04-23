@@ -18,17 +18,20 @@ var _ resource.ResourceWithConfigValidators = (*PagesDomainResource)(nil)
 
 func ResourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
+		Version: 500,
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
+				Description:   "The domain name.",
 				Computed:      true,
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown(), stringplanmodifier.RequiresReplace()},
 			},
 			"name": schema.StringAttribute{
+				Description:   "The domain name.",
 				Required:      true,
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown(), stringplanmodifier.RequiresReplace()},
 			},
 			"account_id": schema.StringAttribute{
-				Description:   "Identifier",
+				Description:   "Identifier.",
 				Required:      true,
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
@@ -71,9 +74,6 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 				Computed:   true,
 				CustomType: customfield.NewNestedObjectType[PagesDomainValidationDataModel](ctx),
 				Attributes: map[string]schema.Attribute{
-					"error_message": schema.StringAttribute{
-						Computed: true,
-					},
 					"method": schema.StringAttribute{
 						Description: `Available values: "http", "txt".`,
 						Computed:    true,
@@ -94,6 +94,9 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 							),
 						},
 					},
+					"error_message": schema.StringAttribute{
+						Computed: true,
+					},
 					"txt_name": schema.StringAttribute{
 						Computed: true,
 					},
@@ -106,9 +109,6 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 				Computed:   true,
 				CustomType: customfield.NewNestedObjectType[PagesDomainVerificationDataModel](ctx),
 				Attributes: map[string]schema.Attribute{
-					"error_message": schema.StringAttribute{
-						Computed: true,
-					},
 					"status": schema.StringAttribute{
 						Description: `Available values: "pending", "active", "deactivated", "blocked", "error".`,
 						Computed:    true,
@@ -121,6 +121,9 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 								"error",
 							),
 						},
+					},
+					"error_message": schema.StringAttribute{
+						Computed: true,
 					},
 				},
 			},

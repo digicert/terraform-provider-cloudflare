@@ -10,8 +10,9 @@ import (
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/acctest"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/consts"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/utils"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 func TestMain(m *testing.M) {
@@ -30,22 +31,39 @@ func testSweepCloudflareFirewallRuleSweeper(r string) error {
 	ctx := context.Background()
 	client, clientErr := acctest.SharedV1Client() // TODO(terraform): replace with SharedV2Clent
 	if clientErr != nil {
-		tflog.Error(ctx, fmt.Sprintf("Failed to create Cloudflare client: %s", clientErr))
+		tflog.Error(ctx, fmt.Sprintf("Failed to create Cloudflare client: %s",clientErr))
+		return clientErr
 	}
 
 	zoneID := os.Getenv("CLOUDFLARE_ZONE_ID")
-	rules, _, rulesErr := client.FirewallRules(context.Background(), cloudflare.ZoneIdentifier(zoneID), cloudflare.FirewallRuleListParams{})
+	if zoneID == "" {
+		tflog.Info(ctx, "Skipping firewall rules sweep: CLOUDFLARE_ZONE_ID not set")
+		return nil
+	}
+	rules, _, rulesErr := client.FirewallRules(ctx, cloudflare.ZoneIdentifier(zoneID), cloudflare.FirewallRuleListParams{})
 
 	if rulesErr != nil {
-		tflog.Error(ctx, fmt.Sprintf("Failed to fetch Cloudflare firewall rules: %s", rulesErr))
+		tflog.Error(ctx, fmt.Sprintf("Failed to fetch Cloudflare firewall rules: %s",rulesErr))
+		return rulesErr
+	}
+	if len(rules) == 0 {
+		tflog.Info(ctx, "No Cloudflare firewall rules to sweep")
+		return nil
 	}
 
 	for _, rule := range rules {
-		err := client.DeleteFirewallRule(context.Background(), cloudflare.ZoneIdentifier(zoneID), rule.ID)
-
-		if err != nil {
-			tflog.Error(ctx, fmt.Sprintf("Failed to delete Cloudflare firewall rule (%s) in zone ID: %s", rule.ID, zoneID))
+		// Use standard filtering helper on the description field
+		if !utils.ShouldSweepResource(rule.Description) {
+			continue
 		}
+
+		tflog.Info(ctx, fmt.Sprintf("Deleting firewall rule: %s (zone: %s)", rule.ID, zoneID))
+		err := client.DeleteFirewallRule(ctx, cloudflare.ZoneIdentifier(zoneID), rule.ID)
+		if err != nil {
+			tflog.Error(ctx, fmt.Sprintf("Failed to delete firewall rule %s: %s", rule.ID, err))
+			continue
+		}
+		tflog.Info(ctx, fmt.Sprintf("Deleted firewall rule: %s", rule.ID))
 	}
 
 	return nil
@@ -140,4 +158,36 @@ func TestAccFirewallRuleWithUnicodeAndHTMLEntity(t *testing.T) {
 
 func testAccFirewallRuleWithUnicodeAndHTMLEntityConfig(resourceID, zoneID, paused, description, expression, action, priority string) string {
 	return acctest.LoadTestCase("accfirewallrulewithunicodeandhtmlentityconfig.tf", resourceID, zoneID, paused, description, expression, action, priority)
+}
+
+func TestAccUpgradeFirewallRule_FromPublishedV5(t *testing.T) {
+	rnd := utils.GenerateRandomResourceName()
+	zoneID := os.Getenv("CLOUDFLARE_ZONE_ID")
+	filterQuoted := `(http.request.uri.path ~ \".*wp-login-` + rnd + `.php\" or http.request.uri.path ~ \".*xmlrpc.php\") and ip.src ne 192.0.2.1`
+
+	config := testFirewallRuleConfig(rnd, zoneID, "true", "this is notes", filterQuoted, "allow", "1")
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() { acctest.TestAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.16.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+		},
+	})
 }

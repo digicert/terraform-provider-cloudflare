@@ -22,7 +22,7 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 			},
 			"lan_id": schema.StringAttribute{
 				Description: "Identifier",
-				Optional:    true,
+				Required:    true,
 			},
 			"account_id": schema.StringAttribute{
 				Description: "Identifier",
@@ -32,8 +32,19 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 				Description: "Identifier",
 				Required:    true,
 			},
+			"bond_id": schema.Int64Attribute{
+				Computed: true,
+			},
 			"ha_link": schema.BoolAttribute{
 				Description: "mark true to use this LAN for HA probing. only works for site with HA turned on. only one LAN can be set as the ha_link.",
+				Computed:    true,
+			},
+			"is_breakout": schema.BoolAttribute{
+				Description: "mark true to use this LAN for source-based breakout traffic",
+				Computed:    true,
+			},
+			"is_prioritized": schema.BoolAttribute{
+				Description: "mark true to use this LAN for source-based prioritized traffic",
 				Computed:    true,
 			},
 			"name": schema.StringAttribute{

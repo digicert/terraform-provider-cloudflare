@@ -18,7 +18,7 @@ type PagesDomainResultDataSourceEnvelope struct {
 
 type PagesDomainDataSourceModel struct {
 	ID                   types.String                                                         `tfsdk:"id" path:"domain_name,computed"`
-	DomainName           types.String                                                         `tfsdk:"domain_name" path:"domain_name,optional"`
+	DomainName           types.String                                                         `tfsdk:"domain_name" path:"domain_name,required"`
 	AccountID            types.String                                                         `tfsdk:"account_id" path:"account_id,required"`
 	ProjectName          types.String                                                         `tfsdk:"project_name" path:"project_name,required"`
 	CertificateAuthority types.String                                                         `tfsdk:"certificate_authority" json:"certificate_authority,computed"`
@@ -40,14 +40,14 @@ func (m *PagesDomainDataSourceModel) toReadParams(_ context.Context) (params pag
 }
 
 type PagesDomainValidationDataDataSourceModel struct {
-	ErrorMessage types.String `tfsdk:"error_message" json:"error_message,computed"`
 	Method       types.String `tfsdk:"method" json:"method,computed"`
 	Status       types.String `tfsdk:"status" json:"status,computed"`
+	ErrorMessage types.String `tfsdk:"error_message" json:"error_message,computed"`
 	TXTName      types.String `tfsdk:"txt_name" json:"txt_name,computed"`
 	TXTValue     types.String `tfsdk:"txt_value" json:"txt_value,computed"`
 }
 
 type PagesDomainVerificationDataDataSourceModel struct {
-	ErrorMessage types.String `tfsdk:"error_message" json:"error_message,computed"`
 	Status       types.String `tfsdk:"status" json:"status,computed"`
+	ErrorMessage types.String `tfsdk:"error_message" json:"error_message,computed"`
 }

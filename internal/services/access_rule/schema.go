@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -21,6 +22,7 @@ var _ resource.ResourceWithConfigValidators = (*AccessRuleResource)(nil)
 
 func ResourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
+		Version: 500,
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description:   "The unique identifier of the IP Access rule.",
@@ -70,12 +72,18 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 					"value": schema.StringAttribute{
 						Description: "The IP address to match. This address will be compared to the IP address of incoming requests.",
 						Optional:    true,
+						Validators: []validator.String{
+							ipv6Validator(),
+							cidrValidator(),
+						},
 					},
 				},
 			},
 			"notes": schema.StringAttribute{
 				Description: "An informative summary of the rule, typically used as a reminder or explanation.",
+				Computed:    true,
 				Optional:    true,
+				Default:     stringdefault.StaticString(""),
 			},
 			"created_on": schema.StringAttribute{
 				Description: "The timestamp of when the rule was created.",

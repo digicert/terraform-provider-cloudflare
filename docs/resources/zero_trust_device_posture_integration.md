@@ -16,7 +16,7 @@ resource "cloudflare_zero_trust_device_posture_integration" "example_zero_trust_
   account_id = "699d98642c564d2e855e9661899b7252"
   config = {
     api_url = "https://as123.awmdm.com/API"
-    auth_url = "https://na.uemauth.vmwservices.com/connect/token"
+    auth_url = "https://na.uemauth.workspaceone.com/connect/token"
     client_id = "example client id"
     client_secret = "example client secret"
   }
@@ -52,7 +52,7 @@ Optional:
 - `api_url` (String) The Workspace One API URL provided in the Workspace One Admin Dashboard.
 - `auth_url` (String) The Workspace One Authorization URL depending on your region.
 - `client_id` (String) The Workspace One client ID provided in the Workspace One Admin Dashboard.
-- `client_key` (String) The Uptycs client secret.
+- `client_key` (String, Sensitive) The Uptycs client secret.
 - `client_secret` (String, Sensitive) The Workspace One client secret provided in the Workspace One Admin Dashboard.
 - `customer_id` (String) The Crowdstrike customer ID.
 
@@ -63,3 +63,5 @@ Import is supported using the following syntax:
 ```shell
 $ terraform import cloudflare_zero_trust_device_posture_integration.example '<account_id>/<integration_id>'
 ```
+
+

@@ -28,6 +28,7 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 			"zone_id": schema.StringAttribute{
 				Description: "Identifier",
 				Optional:    true,
+				Computed:    true,
 			},
 			"activated_on": schema.StringAttribute{
 				Description: "The last time proof of ownership was detected and the zone was made\nactive.",
@@ -53,7 +54,7 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 				CustomType:  timetypes.RFC3339Type{},
 			},
 			"name": schema.StringAttribute{
-				Description: "The domain name.",
+				Description: `The domain name. Per [RFC 1035](https://datatracker.ietf.org/doc/html/rfc1035#section-2.3.4) the overall zone name can be up to 253 characters, with each segment ("label") not exceeding 63 characters.`,
 				Computed:    true,
 			},
 			"original_dnshost": schema.StringAttribute{

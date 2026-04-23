@@ -1,6 +1,7 @@
 package zero_trust_tunnel_cloudflared_config_test
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"testing"
@@ -8,12 +9,33 @@ import (
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/acctest"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/consts"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/utils"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
 	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 )
+
+func TestMain(m *testing.M) {
+	resource.TestMain(m)
+}
+
+func init() {
+	resource.AddTestSweepers("cloudflare_zero_trust_tunnel_cloudflared_config", &resource.Sweeper{
+		Name: "cloudflare_zero_trust_tunnel_cloudflared_config",
+		F:    testSweepCloudflareZeroTrustTunnelCloudflaredConfig,
+	})
+}
+
+func testSweepCloudflareZeroTrustTunnelCloudflaredConfig(r string) error {
+	ctx := context.Background()
+	// Tunnel Cloudflared Config is configuration tied to cloudflared tunnels.
+	// It's managed as part of the tunnel lifecycle.
+	// The tunnel sweeper will handle cleanup.
+	tflog.Info(ctx, "Zero Trust Tunnel Cloudflared Config doesn't require sweeping (tunnel configuration)")
+	return nil
+}
 
 func testTunnelConfig(resourceID, accountID, tunnelSecret, domain string) string {
 	return acctest.LoadTestCase("tunnelconfig.tf", resourceID, accountID, tunnelSecret, domain)
@@ -134,7 +156,7 @@ func TestAccCloudflareTunnelConfig_Full(t *testing.T) {
 				ImportStateIdPrefix: fmt.Sprintf("%s/", zoneID),
 				ImportState:         true,
 				ImportStateVerify:   true,
-				ImportStateVerifyIgnore: []string{"config.warp_routing"},
+				ImportStateVerifyIgnore: []string{},
 			},
 		},
 	})
@@ -184,7 +206,7 @@ func TestAccCloudflareTunnelConfig_Short(t *testing.T) {
 				ImportStateIdPrefix: fmt.Sprintf("%s/", zoneID),
 				ImportState:         true,
 				ImportStateVerify:   true,
-				ImportStateVerifyIgnore: []string{"config.warp_routing"},
+				ImportStateVerifyIgnore: []string{},
 			},
 		},
 	})
@@ -235,7 +257,43 @@ func TestAccCloudflareTunnelConfig_NilPointer(t *testing.T) {
 				ImportStateIdPrefix: fmt.Sprintf("%s/", zoneID),
 				ImportState:         true,
 				ImportStateVerify:   true,
-				ImportStateVerifyIgnore: []string{"config.warp_routing"},
+				ImportStateVerifyIgnore: []string{},
+			},
+		},
+	})
+}
+
+func TestAccUpgradeZeroTrustTunnelCloudflaredConfig_FromPublishedV5(t *testing.T) {
+	rnd := utils.GenerateRandomResourceName()
+	zoneID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	domain := os.Getenv("CLOUDFLARE_DOMAIN")
+	tunnelSecret := utils.RandStringFromCharSet(32, utils.CharSetAlpha)
+
+	config := testTunnelConfig(rnd, zoneID, tunnelSecret, domain)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			acctest.TestAccPreCheck(t)
+			acctest.TestAccPreCheck_AccountID(t)
+		},
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.16.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
 			},
 		},
 	})

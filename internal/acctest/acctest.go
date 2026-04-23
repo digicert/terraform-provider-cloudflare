@@ -58,7 +58,12 @@ func TestAccPreCheck_Credentials(t *testing.T) {
 	userServiceKey := os.Getenv(consts.APIUserServiceKeyEnvVarKey)
 
 	if apiToken == "" && apiKey == "" && userServiceKey == "" {
-		t.Fatal("valid credentials are required for this acceptance test.")
+		t.Fatalf(
+			"valid credentials are required for this acceptance test: one of %s, %s, or %s must be set",
+			consts.APIKeyEnvVarKey,
+			consts.APITokenEnvVarKey,
+			consts.APIUserServiceKeyEnvVarKey,
+		)
 	}
 }
 
@@ -125,22 +130,22 @@ func TestAccPreCheck_LogpushToken(t *testing.T) {
 	}
 }
 
-// Test helper method checking the Workspace One environment variables are present.
-func TestAccPreCheck_WorkspaceOne(t *testing.T) {
-	if v := os.Getenv("CLOUDFLARE_WORKSPACE_ONE_CLIENT_ID"); v == "" {
-		t.Fatal("CLOUDFLARE_WORKSPACE_ONE_CLIENT_ID must be set for this acceptance test.")
+// Test helper method checking the CrowdStrike environment variables are present.
+func TestAccPreCheck_CrowdStrike(t *testing.T) {
+	if v := os.Getenv("CLOUDFLARE_CROWDSTRIKE_CLIENT_ID"); v == "" {
+		t.Skip("Skipping acceptance test as CLOUDFLARE_CROWDSTRIKE_CLIENT_ID is not set")
 	}
 
-	if v := os.Getenv("CLOUDFLARE_WORKSPACE_ONE_CLIENT_SECRET"); v == "" {
-		t.Fatal("CLOUDFLARE_WORKSPACE_ONE_CLIENT_SECRET must be set for this acceptance test.")
+	if v := os.Getenv("CLOUDFLARE_CROWDSTRIKE_CLIENT_SECRET"); v == "" {
+		t.Skip("Skipping acceptance test as CLOUDFLARE_CROWDSTRIKE_CLIENT_SECRET is not set")
 	}
 
-	if v := os.Getenv("CLOUDFLARE_WORKSPACE_ONE_API_URL"); v == "" {
-		t.Fatal("CLOUDFLARE_WORKSPACE_ONE_API_URL must be set for this acceptance test.")
+	if v := os.Getenv("CLOUDFLARE_CROWDSTRIKE_API_URL"); v == "" {
+		t.Skip("Skipping acceptance test as CLOUDFLARE_CROWDSTRIKE_API_URL is not set")
 	}
 
-	if v := os.Getenv("CLOUDFLARE_WORKSPACE_ONE_AUTH_URL"); v == "" {
-		t.Fatal("CLOUDFLARE_WORKSPACE_ONE_AUTH_URL must be set for this acceptance test.")
+	if v := os.Getenv("CLOUDFLARE_CROWDSTRIKE_CUSTOMER_ID"); v == "" {
+		t.Skip("Skipping acceptance test as CLOUDFLARE_CROWDSTRIKE_CUSTOMER_ID is not set")
 	}
 }
 
@@ -156,10 +161,20 @@ func TestAccPreCheck_Pages(t *testing.T) {
 	}
 }
 
-// Test helper method checking `CLOUDFLARE_BYO_IP_PREFIX_ID` is present.
+// Test helper method checking all required environment variables for BYOIP
+// acceptance tests are present.
 func TestAccPreCheck_BYOIPPrefix(t *testing.T) {
-	if v := os.Getenv("CLOUDFLARE_BYO_IP_PREFIX_ID"); v == "" {
-		t.Skip("Skipping acceptance test as CLOUDFLARE_BYO_IP_PREFIX_ID is not set")
+	requiredKeys := []string{
+		"CLOUDFLARE_BYO_IP_CIDR",
+		"CLOUDFLARE_BYO_IP_ASN",
+		"CLOUDFLARE_BYO_IP_LOA_DOCUMENT_ID",
+		"CLOUDFLARE_BYO_IP_PREFIX_ID",
+	}
+
+	for _, k := range requiredKeys {
+		if os.Getenv(k) == "" {
+			t.Skipf("%s must be set for this acceptance test", k)
+		}
 	}
 }
 
@@ -203,6 +218,14 @@ func TestAccPreCheck_InternalZoneID(t *testing.T) {
 	if v := os.Getenv("CLOUDFLARE_INTERNAL_ZONE_ID"); v == "" {
 		t.Skip("Skipping acceptance test as CLOUDFLARE_INTERNAL_ZONE_ID is not set")
 	}
+}
+
+// GetLastV4Version returns LAST_V4_VERSION from environment or default "4.52.5"
+func GetLastV4Version() string {
+	if v := os.Getenv("LAST_V4_VERSION"); v != "" {
+		return v
+	}
+	return "4.52.5"
 }
 
 // TestAccSkipForDefaultZone is used for skipping over tests that are not run by
@@ -383,6 +406,16 @@ func (e expectEmptyPlanExceptFalseyToNull) CheckPlan(ctx context.Context, req pl
 			if isSetNestedAttributeField(rc.Address, key) {
 				if areSetNestedAttributesEquivalent(beforeValue, afterValue) {
 					continue // Sets are equivalent despite ordering differences
+				}
+			}
+
+			// Special handling for map attributes that may contain json.Number types or DynamicAttribute fields
+			// This applies to all resources, not just dns_record, to handle Terraform state type variations
+			if beforeMap, ok := beforeValue.(map[string]interface{}); ok {
+				if afterMap, ok := afterValue.(map[string]interface{}); ok {
+					if areMapsSemanticallySame(beforeMap, afterMap) {
+						continue // Maps are semantically equivalent
+					}
 				}
 			}
 
@@ -571,7 +604,366 @@ func isFalseyValue(v interface{}) bool {
 	}
 }
 
+// areMapsSemanticallySame compares two map values for semantic equality.
+// This handles the case where reflect.DeepEqual fails on maps that are semantically identical
+// but represented differently in memory (e.g., different object instances with same content).
+func areMapsSemanticallySame(before, after interface{}) bool {
+	beforeMap, beforeOk := before.(map[string]interface{})
+	afterMap, afterOk := after.(map[string]interface{})
+
+	if !beforeOk || !afterOk {
+		// If either isn't a map, fall back to reflect.DeepEqual
+		return reflect.DeepEqual(before, after)
+	}
+
+	// Check if maps have the same keys
+	if len(beforeMap) != len(afterMap) {
+		return false
+	}
+
+	// Check each key-value pair
+	for key, beforeVal := range beforeMap {
+		afterVal, exists := afterMap[key]
+		if !exists {
+			return false
+		}
+
+		// For nested maps (like DynamicAttribute structures), recurse
+		if beforeMapNested, ok := beforeVal.(map[string]interface{}); ok {
+			if afterMapNested, ok := afterVal.(map[string]interface{}); ok {
+				if !areMapsSemanticallySame(beforeMapNested, afterMapNested) {
+					return false
+				}
+				continue
+			}
+		}
+
+		// For nil values, both must be nil
+		if beforeVal == nil && afterVal == nil {
+			continue
+		}
+		if beforeVal == nil || afterVal == nil {
+			return false
+		}
+
+		// Handle json.Number type specially - convert to string for comparison
+		// This handles cases where state has json.Number but plan has string or vice versa
+		beforeStr, beforeIsJSONNumber := beforeVal.(json.Number)
+		afterStr, afterIsJSONNumber := afterVal.(json.Number)
+
+		if beforeIsJSONNumber || afterIsJSONNumber {
+			// At least one is json.Number - compare string representations
+			var beforeAsString, afterAsString string
+			if beforeIsJSONNumber {
+				beforeAsString = string(beforeStr)
+			} else if str, ok := beforeVal.(string); ok {
+				beforeAsString = str
+			} else {
+				beforeAsString = fmt.Sprintf("%v", beforeVal)
+			}
+
+			if afterIsJSONNumber {
+				afterAsString = string(afterStr)
+			} else if str, ok := afterVal.(string); ok {
+				afterAsString = str
+			} else {
+				afterAsString = fmt.Sprintf("%v", afterVal)
+			}
+
+			if beforeAsString != afterAsString {
+				return false
+			}
+			continue // Values are semantically equal
+		}
+
+		// Compare types first
+		beforeType := reflect.TypeOf(beforeVal)
+		afterType := reflect.TypeOf(afterVal)
+		if beforeType != afterType {
+			return false
+		}
+
+		// For other values, use reflect.DeepEqual
+		if !reflect.DeepEqual(beforeVal, afterVal) {
+			return false
+		}
+	}
+
+	return true
+}
+
 var ExpectEmptyPlanExceptFalseyToNull = expectEmptyPlanExceptFalseyToNull{}
+
+// isAllowedRuleSettingsChange checks if a rule_settings change is allowed
+// for Gateway Policy resources. Allows nil-to-empty-collection changes for
+// add_headers and override_ips fields which the API populates automatically.
+func isAllowedRuleSettingsChange(before, after interface{}) bool {
+	beforeMap, beforeOk := before.(map[string]interface{})
+	afterMap, afterOk := after.(map[string]interface{})
+
+	if !beforeOk || !afterOk {
+		return false
+	}
+
+	// Get all keys from both maps
+	allKeys := make(map[string]bool)
+	for key := range beforeMap {
+		allKeys[key] = true
+	}
+	for key := range afterMap {
+		allKeys[key] = true
+	}
+
+	// Check each field
+	for key := range allKeys {
+		beforeVal, beforeExists := beforeMap[key]
+		afterVal, afterExists := afterMap[key]
+
+		// Skip if values are the same
+		if reflect.DeepEqual(beforeVal, afterVal) {
+			continue
+		}
+
+		// Allow nil fields in before to be removed in after (cleaned up nil fields)
+		if beforeExists && !afterExists && beforeVal == nil {
+			continue
+		}
+
+		// Allow fields being added if they were missing before (beforeExists == false)
+		if !beforeExists && afterExists {
+			// Allow adding add_headers as empty map
+			if key == "add_headers" && isEmptyMap(afterVal) {
+				continue
+			}
+			// Allow adding override_ips as empty slice
+			if key == "override_ips" && isEmptySlice(afterVal) {
+				continue
+			}
+		}
+
+		// Allow nil -> map{} for add_headers
+		if key == "add_headers" {
+			if beforeVal == nil && isEmptyMap(afterVal) {
+				continue
+			}
+		}
+
+		// Allow nil -> [] for override_ips
+		if key == "override_ips" {
+			if (beforeVal == nil || !beforeExists) && isEmptySlice(afterVal) {
+				continue
+			}
+		}
+
+		// Allow fields removed from v5 schema to be removed or change
+		removedFields := []string{"allow_child_bypass", "insecure_disable_dnssec_validation",
+			"ignore_cname_category_matches", "resolve_dns_through_cloudflare", "block_page",
+			"override_host", "ip_indicator_feeds"}
+		isRemovedField := false
+		for _, removedField := range removedFields {
+			if key == removedField {
+				isRemovedField = true
+				break
+			}
+		}
+		if isRemovedField {
+			continue // Removed field changes are allowed
+		}
+
+		// If we get here and the field is different, this change is not allowed
+		return false
+	}
+
+	return true
+}
+
+// isEmptyMap checks if a value is an empty map
+func isEmptyMap(v interface{}) bool {
+	m, ok := v.(map[string]interface{})
+	return ok && len(m) == 0
+}
+
+// isEmptySlice checks if a value is an empty slice
+func isEmptySlice(v interface{}) bool {
+	s, ok := v.([]interface{})
+	return ok && len(s) == 0
+}
+
+// ExpectEmptyPlanExceptGatewayPolicyAPIChanges is a plan check specifically for
+// cloudflare_zero_trust_gateway_policy resources. It expects an empty plan except for:
+// - Falsey-to-null changes (like the base checker)
+// - Precedence changes (API auto-calculates with random offset)
+// - rule_settings changes (API populates empty collections, removes deprecated fields)
+type expectEmptyPlanExceptGatewayPolicyAPIChanges struct{}
+
+func (e expectEmptyPlanExceptGatewayPolicyAPIChanges) CheckPlan(ctx context.Context, req plancheck.CheckPlanRequest, resp *plancheck.CheckPlanResponse) {
+	for _, rc := range req.Plan.ResourceChanges {
+		if rc.Change.Actions[0] == "no-op" || rc.Change.Actions[0] == "read" {
+			continue
+		}
+
+		// Check if this is an update action
+		if rc.Change.Actions[0] != "update" {
+			resp.Error = fmt.Errorf("expected empty plan, but %s has planned action(s): %v", rc.Address, rc.Change.Actions)
+			return
+		}
+
+		// For updates, check each attribute change
+		beforeMap, beforeOk := rc.Change.Before.(map[string]interface{})
+		afterMap, afterOk := rc.Change.After.(map[string]interface{})
+
+		if !beforeOk || !afterOk {
+			resp.Error = fmt.Errorf("expected empty plan, but %s has non-map changes", rc.Address)
+			return
+		}
+
+		// Check each attribute that's different
+		for key, afterValue := range afterMap {
+			beforeValue, _ := beforeMap[key]
+
+			// Skip if values are the same
+			if reflect.DeepEqual(beforeValue, afterValue) {
+				continue
+			}
+
+			// Special handling for SetNestedAttribute fields (like include, exclude, require)
+			if isSetNestedAttributeField(rc.Address, key) {
+				if areSetNestedAttributesEquivalent(beforeValue, afterValue) {
+					continue // Sets are equivalent despite ordering differences
+				}
+			}
+
+			// Allow changes from falsey to null
+			if afterValue == nil {
+				if isFalseyValue(beforeValue) {
+					continue // This change is allowed
+				}
+			}
+
+			// Allow session_duration changes from nil to a default value (API sets defaults)
+			if key == "session_duration" && beforeValue == nil && afterValue != nil {
+				continue // This change is allowed - API sets default session duration
+			}
+
+			// Gateway Policy specific: Allow precedence changes (API auto-calculates with random offset)
+			if strings.Contains(rc.Address, "cloudflare_zero_trust_gateway_policy") && key == "precedence" {
+				continue // This change is allowed - API modifies precedence values
+			}
+
+			// Gateway Policy specific: Allow Computed field changes (v5 provider schema issues)
+			// These fields are marked as Computed in v5 schema and show as (known after apply) during refresh
+			if strings.Contains(rc.Address, "cloudflare_zero_trust_gateway_policy") {
+				computedFields := []string{"created_at", "updated_at", "version", "sharable",
+					"deleted_at", "expiration", "read_only", "schedule", "source_account", "warning_status"}
+				isComputedField := false
+				for _, computedField := range computedFields {
+					if key == computedField {
+						isComputedField = true
+						break
+					}
+				}
+				if isComputedField {
+					continue // This change is allowed - v5 provider Computed field
+				}
+			}
+
+			// Gateway Policy specific: Allow rule_settings changes (API normalization)
+			if strings.Contains(rc.Address, "cloudflare_zero_trust_gateway_policy") && key == "rule_settings" {
+				if isAllowedRuleSettingsChange(beforeValue, afterValue) {
+					continue // This change is allowed
+				}
+			}
+
+			// If we get here, it's a disallowed change
+			resp.Error = fmt.Errorf("expected empty plan except for Gateway Policy API changes, but %s.%s has change from %v to %v",
+				rc.Address, key, beforeValue, afterValue)
+			return
+		}
+	}
+}
+
+var ExpectEmptyPlanExceptGatewayPolicyAPIChanges = expectEmptyPlanExceptGatewayPolicyAPIChanges{}
+
+// ExpectEmptyPlanExceptZoneDNSSECStatusChange is a plan check specifically for
+// cloudflare_zone_dnssec resources. It expects an empty plan except for:
+// - Status field changes to null (optional-only field limitation during migration)
+// - Computed field refreshes (happens when status changes trigger resource updates)
+type expectEmptyPlanExceptZoneDNSSECStatusChange struct{}
+
+func (e expectEmptyPlanExceptZoneDNSSECStatusChange) CheckPlan(ctx context.Context, req plancheck.CheckPlanRequest, resp *plancheck.CheckPlanResponse) {
+	for _, rc := range req.Plan.ResourceChanges {
+		if rc.Change.Actions[0] == "no-op" || rc.Change.Actions[0] == "read" {
+			continue
+		}
+
+		// Only check zone_dnssec resources
+		if !strings.HasPrefix(rc.Address, "module.zone_dnssec.cloudflare_zone_dnssec.") &&
+			!strings.HasPrefix(rc.Address, "cloudflare_zone_dnssec.") {
+			resp.Error = fmt.Errorf("expected only zone_dnssec changes, but %s has planned action(s): %v", rc.Address, rc.Change.Actions)
+			return
+		}
+
+		// Check if this is an update action
+		if rc.Change.Actions[0] != "update" {
+			resp.Error = fmt.Errorf("expected empty plan, but %s has planned action(s): %v", rc.Address, rc.Change.Actions)
+			return
+		}
+
+		// For updates, check each attribute change
+		beforeMap, beforeOk := rc.Change.Before.(map[string]interface{})
+		afterMap, afterOk := rc.Change.After.(map[string]interface{})
+
+		if !beforeOk || !afterOk {
+			resp.Error = fmt.Errorf("expected empty plan, but %s has non-map changes", rc.Address)
+			return
+		}
+
+		// Check each attribute that's different
+		for key, afterValue := range afterMap {
+			beforeValue, _ := beforeMap[key]
+
+			// Skip if values are the same
+			if reflect.DeepEqual(beforeValue, afterValue) {
+				continue
+			}
+
+			// Allow status field changes to null (optional-only field limitation)
+			if key == "status" && afterValue == nil {
+				continue
+			}
+
+			// Allow status field changes from "pending" to "active" (API state transition)
+			if key == "status" && beforeValue == "pending" && afterValue == "active" {
+				continue
+			}
+
+			// Allow computed field refreshes to (known after apply)
+			// These fields refresh when status changes trigger resource updates
+			computedFields := []string{"algorithm", "digest", "digest_algorithm", "digest_type",
+				"ds", "flags", "key_tag", "key_type", "modified_on", "public_key",
+				"dnssec_multi_signer", "dnssec_presigned", "dnssec_use_nsec3"}
+			isComputedField := false
+			for _, computedField := range computedFields {
+				if key == computedField {
+					isComputedField = true
+					break
+				}
+			}
+			if isComputedField {
+				// Check if it's changing to (known after apply) which is represented as nil in JSON
+				// Or if it's a value that will refresh from API
+				continue
+			}
+
+			// If we get here, it's a disallowed change
+			resp.Error = fmt.Errorf("expected empty plan except for Zone DNSSEC status/computed field changes, but %s.%s has change from %v to %v",
+				rc.Address, key, beforeValue, afterValue)
+			return
+		}
+	}
+}
+
+var ExpectEmptyPlanExceptZoneDNSSECStatusChange = expectEmptyPlanExceptZoneDNSSECStatusChange{}
 
 // debugLogf logs a message only when TF_LOG=DEBUG is set
 func debugLogf(t *testing.T, format string, args ...interface{}) {
@@ -600,6 +992,54 @@ func WriteOutConfig(t *testing.T, v4Config string, tmpDir string) {
 	}
 	debugLogf(t, "Successfully wrote v4 config (%d bytes)", len(v4Config))
 
+}
+
+// RunMigrationV2Command runs the new tf-migrate binary to transform config and state
+// NOTE: assumes config and state are already in tmpDir
+func RunMigrationV2Command(t *testing.T, v4Config string, tmpDir string, sourceVersion string, targetVersion string) {
+	t.Helper()
+
+	// Get the migration binary path from environment variable
+	migratorPath := os.Getenv("TF_MIGRATE_BINARY_PATH")
+	if migratorPath == "" {
+		// Fall back to default location relative to project root
+		cwd, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("Failed to get current working directory: %v", err)
+		}
+		projectRoot := filepath.Join(cwd, "..", "..", "..")
+		migratorPath = filepath.Join(projectRoot, "tf-migrate", "tf-migrate")
+	}
+
+	// Check if the binary exists
+	if _, err := os.Stat(migratorPath); os.IsNotExist(err) {
+		t.Fatalf("tf-migrate binary not found at %s. Please set TF_MIGRATE_BINARY_PATH or ensure the binary is built.", migratorPath)
+	}
+
+	// Build the command
+	args := []string{
+		"migrate",
+		"--config-dir", tmpDir,
+		"--source-version", sourceVersion,
+		"--target-version", targetVersion,
+		"--skip-phase-check", // skip phased migration prompts — state cleanup is handled by the test harness
+	}
+
+	// Add debug logging if TF_LOG is set
+	if strings.ToLower(os.Getenv("TF_LOG")) == "debug" {
+		args = append(args, "--log-level", "debug")
+	}
+
+	// Run the migration command
+	cmd := exec.Command(migratorPath, args...)
+	cmd.Dir = tmpDir
+
+	// Capture output for debugging
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		t.Fatalf("tf-migrate command failed: %v\nMigration output:\n%s", err, string(output))
+	}
 }
 
 // RunMigrationCommand runs the migration script to transform config and state
@@ -658,8 +1098,8 @@ func RunMigrationCommand(t *testing.T, v4Config string, tmpDir string) {
 	cmd = exec.Command("go", "run", "-C", migratePath, ".",
 		"-config", tmpDir,
 		"-state", filepath.Join(stateDir, "terraform.tfstate"),
-		"-grit=false",       // Disable Grit transformations
-		"-transformer=true", // Enable YAML transformations
+		"-grit=false",                      // Disable Grit transformations
+		"-transformer=true",                // Enable YAML transformations
 		"-transformer-dir", transformerDir) // Use local YAML configs
 	cmd.Dir = tmpDir
 	// Capture output for debugging
@@ -707,6 +1147,44 @@ func MigrationTestStepWithPlan(t *testing.T, v4Config string, tmpDir string, exa
 	return []resource.TestStep{migrationStep, planStep, validationStep}
 }
 
+// MigrationV2TestStepWithPlan creates multiple test steps for v2 migration with plan processing
+// This is similar to MigrationTestStepWithPlan but uses the v2 migration command with explicit version parameters
+func MigrationV2TestStepWithPlan(t *testing.T, v4Config string, tmpDir string, exactVersion string, sourceVersion string, targetVersion string, stateChecks []statecheck.StateCheck) []resource.TestStep {
+	// First step: run migration
+	migrationStep := MigrationV2TestStep(t, v4Config, tmpDir, exactVersion, sourceVersion, targetVersion, nil) // No state checks yet
+
+	// Second step: run plan to process import blocks and state corrections
+	planStep := resource.TestStep{
+		ProtoV6ProviderFactories: TestAccProtoV6ProviderFactories,
+		ConfigDirectory:          config.StaticDirectory(tmpDir),
+		PlanOnly:                 true, // Just run plan to process imports/corrections
+	}
+
+	// Third step: verify final plan is clean and state is correct
+	validationStep := resource.TestStep{
+		ProtoV6ProviderFactories: TestAccProtoV6ProviderFactories,
+		ConfigDirectory:          config.StaticDirectory(tmpDir),
+		ConfigPlanChecks: resource.ConfigPlanChecks{
+			PreApply: []plancheck.PlanCheck{
+				DebugNonEmptyPlan,
+				ExpectEmptyPlanExceptFalseyToNull, // Should be clean after processing
+			},
+		},
+		ConfigStateChecks: stateChecks,
+	}
+
+	return []resource.TestStep{migrationStep, planStep, validationStep}
+}
+
+// InferMigrationVersions determines source and target versions from test provider version.
+// Returns ("v4", "v5") for v4.x versions, ("v5", "v5") for v5.x versions.
+func InferMigrationVersions(testVersion string) (source, target string) {
+	if strings.HasPrefix(testVersion, "5.") {
+		return "v5", "v5"
+	}
+	return "v4", "v5"
+}
+
 // MigrationTestStep creates a test step that runs the migration command and validates with v5 provider
 func MigrationTestStep(t *testing.T, v4Config string, tmpDir string, exactVersion string, stateChecks []statecheck.StateCheck) resource.TestStep {
 	// Choose the appropriate plan check based on the version
@@ -742,5 +1220,346 @@ func MigrationTestStep(t *testing.T, v4Config string, tmpDir string, exactVersio
 			PreApply: planChecks,
 		},
 		ConfigStateChecks: stateChecks,
+	}
+}
+
+// MigrationV2TestStep creates a test step that runs the migration command and validates with v5 provider
+// Parameters:
+//   - t: testing context
+//   - v4Config: the configuration to migrate
+//   - tmpDir: temporary directory for the test
+//   - exactVersion: the exact version of the provider used to create the state (e.g., "4.52.1")
+//   - sourceVersion: the source version for migration (e.g., "v4")
+//   - targetVersion: the target version for migration (e.g., "v5")
+//   - stateChecks: state validation checks to run after migration
+func MigrationV2TestStep(t *testing.T, v4Config string, tmpDir string, exactVersion string, sourceVersion string, targetVersion string, stateChecks []statecheck.StateCheck) resource.TestStep {
+	// Choose the appropriate plan check based on the source version
+	var planChecks []plancheck.PlanCheck
+	if sourceVersion == "v4" {
+		// When upgrading from v4, allow falsey-to-null changes due to removed defaults
+		planChecks = []plancheck.PlanCheck{
+			DebugNonEmptyPlan,
+			ExpectEmptyPlanExceptFalseyToNull,
+		}
+	} else {
+		// When upgrading from other versions, expect a completely empty plan
+		planChecks = []plancheck.PlanCheck{
+			DebugNonEmptyPlan,
+			plancheck.ExpectEmptyPlan(),
+		}
+	}
+
+	return resource.TestStep{
+		PreConfig: func() {
+			WriteOutConfig(t, v4Config, tmpDir)
+			debugLogf(t, "Running migration command for version: %s (%s -> %s)", exactVersion, sourceVersion, targetVersion)
+			RunMigrationV2Command(t, v4Config, tmpDir, sourceVersion, targetVersion)
+		},
+		ProtoV6ProviderFactories: TestAccProtoV6ProviderFactories,
+		ConfigDirectory:          config.StaticDirectory(tmpDir),
+		ConfigPlanChecks: resource.ConfigPlanChecks{
+			PreApply: planChecks,
+		},
+		ConfigStateChecks: stateChecks,
+	}
+}
+
+// RunStateRmForObsoleteTypes removes state entries whose resource type is no longer
+// known to the v5 provider. The working directory is found by globbing for "work*"
+// subdirectories inside tmpDir (created by the terraform-plugin-testing framework).
+// This is the test equivalent of the e2e runner's removeObsoleteStateEntries step.
+//
+// Implementation note: we read the state JSON directly to discover addresses (bypassing
+// "terraform state list", which requires provider schema and fails after tf-migrate
+// rewrites the config to v5 syntax with a stale .terraform directory). We then call
+// "terraform state rm -state=<path> <addr>" for each match, which does not need
+// provider schema — it only manipulates the state file by address.
+func RunStateRmForObsoleteTypes(t *testing.T, tmpDir string, obsoleteTypes []string) {
+	t.Helper()
+
+	// Find the terraform working directory (work* subdirectory of tmpDir).
+	matches, err := filepath.Glob(filepath.Join(tmpDir, "work*"))
+	if err != nil || len(matches) == 0 {
+		debugLogf(t, "RunStateRmForObsoleteTypes: no work* directory found in %s", tmpDir)
+		return
+	}
+	workDir := matches[0]
+
+	stateFile := filepath.Join(workDir, "terraform.tfstate")
+	data, err := os.ReadFile(stateFile)
+	if err != nil {
+		debugLogf(t, "RunStateRmForObsoleteTypes: cannot read state file %s: %v", stateFile, err)
+		return
+	}
+
+	// Parse just enough of the state to enumerate resource addresses.
+	var state struct {
+		Resources []struct {
+			Module string `json:"module,omitempty"`
+			Mode   string `json:"mode"`
+			Type   string `json:"type"`
+			Name   string `json:"name"`
+		} `json:"resources"`
+	}
+	if err := json.Unmarshal(data, &state); err != nil {
+		debugLogf(t, "RunStateRmForObsoleteTypes: cannot parse state file: %v", err)
+		return
+	}
+
+	// Build set of obsolete types for O(1) lookup.
+	obsoleteSet := make(map[string]bool, len(obsoleteTypes))
+	for _, typ := range obsoleteTypes {
+		obsoleteSet[typ] = true
+	}
+
+	// Collect addresses of resources whose type is obsolete.
+	var addrs []string
+	for _, r := range state.Resources {
+		if !obsoleteSet[r.Type] {
+			continue
+		}
+		addr := r.Type + "." + r.Name
+		if r.Module != "" {
+			addr = r.Module + "." + addr
+		}
+		addrs = append(addrs, addr)
+	}
+	if len(addrs) == 0 {
+		debugLogf(t, "RunStateRmForObsoleteTypes: no obsolete entries found in state")
+		return
+	}
+
+	// Find the terraform binary.
+	tfBin, err := exec.LookPath("terraform")
+	if err != nil {
+		t.Errorf("RunStateRmForObsoleteTypes: terraform binary not found: %v", err)
+		return
+	}
+
+	// Run "terraform state rm -state=<path> <addr>" for each obsolete address.
+	// The -state flag means Terraform reads/writes the file directly without
+	// needing to initialise providers, so this works even with a stale .terraform dir.
+	for _, addr := range addrs {
+		args := []string{"state", "rm", "-state=" + stateFile, addr}
+		cmd := exec.Command(tfBin, args...)
+		cmd.Dir = workDir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Errorf("RunStateRmForObsoleteTypes: failed to remove %s: %v\n%s", addr, err, out)
+		} else {
+			debugLogf(t, "RunStateRmForObsoleteTypes: removed obsolete state entry %s", addr)
+		}
+	}
+}
+
+// MigrationV2TestStepForZoneSetting creates a test step for cloudflare_zone_settings_override
+// migration. After tf-migrate runs, removes cloudflare_zone_settings_override state entries
+// before terraform plan — the v5 provider has no schema for this type and cannot read the
+// old state entry to process the removed block.
+func MigrationV2TestStepForZoneSetting(t *testing.T, v4Config string, tmpDir string, exactVersion string, sourceVersion string, targetVersion string, stateChecks []statecheck.StateCheck) resource.TestStep {
+	var planChecks []plancheck.PlanCheck
+	if sourceVersion == "v4" {
+		planChecks = []plancheck.PlanCheck{
+			DebugNonEmptyPlan,
+			ExpectEmptyPlanExceptFalseyToNull,
+		}
+	} else {
+		planChecks = []plancheck.PlanCheck{
+			DebugNonEmptyPlan,
+			plancheck.ExpectEmptyPlan(),
+		}
+	}
+
+	return resource.TestStep{
+		PreConfig: func() {
+			WriteOutConfig(t, v4Config, tmpDir)
+			debugLogf(t, "Running migration command for zone_setting: %s (%s -> %s)", exactVersion, sourceVersion, targetVersion)
+			RunMigrationV2Command(t, v4Config, tmpDir, sourceVersion, targetVersion)
+			RunStateRmForObsoleteTypes(t, tmpDir, []string{"cloudflare_zone_settings_override"})
+		},
+		ProtoV6ProviderFactories: TestAccProtoV6ProviderFactories,
+		ConfigDirectory:          config.StaticDirectory(tmpDir),
+		ConfigPlanChecks: resource.ConfigPlanChecks{
+			PreApply: planChecks,
+		},
+		ConfigStateChecks: stateChecks,
+	}
+}
+
+// MigrationV2TestStepForGatewayPolicy creates a test step for cloudflare_zero_trust_gateway_policy migration
+// that uses a custom plan checker to handle Gateway Policy API normalization behaviors:
+// - Precedence changes (API auto-calculates with random offset 1-100)
+// - rule_settings changes (API populates empty collections, removes deprecated fields)
+//
+// Parameters:
+//   - expectNonEmptyPlan: Set to true for tests with rule_settings that have v5 provider schema issues
+func MigrationV2TestStepForGatewayPolicy(t *testing.T, v4Config string, tmpDir string, exactVersion string, sourceVersion string, targetVersion string, expectNonEmptyPlan bool, stateChecks []statecheck.StateCheck) resource.TestStep {
+	return resource.TestStep{
+		PreConfig: func() {
+			WriteOutConfig(t, v4Config, tmpDir)
+			debugLogf(t, "Running migration command for Gateway Policy: %s (%s -> %s)", exactVersion, sourceVersion, targetVersion)
+			RunMigrationV2Command(t, v4Config, tmpDir, sourceVersion, targetVersion)
+		},
+		ProtoV6ProviderFactories: TestAccProtoV6ProviderFactories,
+		ConfigDirectory:          config.StaticDirectory(tmpDir),
+		ExpectNonEmptyPlan:       expectNonEmptyPlan,
+		ConfigPlanChecks: resource.ConfigPlanChecks{
+			PreApply: []plancheck.PlanCheck{
+				DebugNonEmptyPlan,
+				ExpectEmptyPlanExceptGatewayPolicyAPIChanges,
+			},
+			// Note: PostApplyPostRefresh checks are intentionally omitted to allow
+			// the ExpectNonEmptyPlan field to control refresh plan expectations.
+		},
+		ConfigStateChecks: stateChecks,
+	}
+}
+
+// MigrationV2TestStepForZoneDNSSEC creates a test step for cloudflare_zone_dnssec migration.
+// The status field is optional-only (not optional+computed), so when migrated to null,
+// it will cause a non-empty plan. This function expects that non-empty plan and validates
+// that only the status field (and optionally computed fields) change.
+func MigrationV2TestStepForZoneDNSSEC(t *testing.T, v4Config string, tmpDir string, exactVersion string, sourceVersion string, targetVersion string, stateChecks []statecheck.StateCheck) resource.TestStep {
+	return resource.TestStep{
+		PreConfig: func() {
+			WriteOutConfig(t, v4Config, tmpDir)
+			debugLogf(t, "Running migration command for Zone DNSSEC: %s (%s -> %s)", exactVersion, sourceVersion, targetVersion)
+			RunMigrationV2Command(t, v4Config, tmpDir, sourceVersion, targetVersion)
+		},
+		ProtoV6ProviderFactories: TestAccProtoV6ProviderFactories,
+		ConfigDirectory:          config.StaticDirectory(tmpDir),
+		ExpectNonEmptyPlan:       true, // status field becomes null, causing non-empty plan
+		ConfigPlanChecks: resource.ConfigPlanChecks{
+			PreApply: []plancheck.PlanCheck{
+				DebugNonEmptyPlan,
+				ExpectEmptyPlanExceptZoneDNSSECStatusChange,
+			},
+		},
+		ConfigStateChecks: stateChecks,
+	}
+}
+
+// MigrationV2TestStepWithStateNormalization creates test steps for migrations where the v5 provider's
+// schema causes state normalization issues. This is needed when:
+// - The v5 provider returns all fields from the API (including nil/empty ones)
+// - The migrated state has only populated fields
+// - Terraform needs a plan cycle to normalize the state (remove nil fields)
+//
+// This helper expects an empty plan in the migration step, then runs a plan-only step
+// to normalize the state, before validating with a clean plan check.
+//
+// Use this when `ExpectEmptyPlanExceptFalseyToNull` is too restrictive because the state
+// changes involve removing entire nil fields rather than just falsey-to-null conversions.
+//
+// Example use case: cloudflare_zero_trust_access_group where selector fields are removed
+// from state during normalization.
+func MigrationV2TestStepWithStateNormalization(t *testing.T, v4Config string, tmpDir string, exactVersion string, sourceVersion string, targetVersion string, stateChecks []statecheck.StateCheck) []resource.TestStep {
+	// Step 1: Run migration
+	migrationStep := resource.TestStep{
+		PreConfig: func() {
+			WriteOutConfig(t, v4Config, tmpDir)
+			debugLogf(t, "Running migration command for version: %s (%s -> %s)", exactVersion, sourceVersion, targetVersion)
+			RunMigrationV2Command(t, v4Config, tmpDir, sourceVersion, targetVersion)
+		},
+		ProtoV6ProviderFactories: TestAccProtoV6ProviderFactories,
+		ConfigDirectory:          config.StaticDirectory(tmpDir),
+	}
+
+	// Step 2: Run plan-only to normalize state (removes nil/empty fields)
+	planStep := resource.TestStep{
+		ProtoV6ProviderFactories: TestAccProtoV6ProviderFactories,
+		ConfigDirectory:          config.StaticDirectory(tmpDir),
+		PlanOnly:                 true,
+	}
+
+	// Step 3: Verify final plan is clean and state is correct after normalization
+	validationStep := resource.TestStep{
+		ProtoV6ProviderFactories: TestAccProtoV6ProviderFactories,
+		ConfigDirectory:          config.StaticDirectory(tmpDir),
+		ConfigPlanChecks: resource.ConfigPlanChecks{
+			PreApply: []plancheck.PlanCheck{
+				DebugNonEmptyPlan,
+				ExpectEmptyPlanExceptFalseyToNull, // Should be clean after normalization
+			},
+		},
+		ConfigStateChecks: stateChecks,
+	}
+
+	return []resource.TestStep{migrationStep, planStep, validationStep}
+}
+
+// MigrationV2TestStepAllowCreate allows non-empty plans when a v4 resource needs to be split into multiple v5 resources,
+//
+// Example: cloudflare_argo with both smart_routing and tiered_caching becomes two separate resources
+// Returns two steps: one for migration+apply, one for verification
+func MigrationV2TestStepAllowCreate(t *testing.T, v4Config string, tmpDir string, exactVersion string, sourceVersion string, targetVersion string, stateChecks []statecheck.StateCheck) []resource.TestStep {
+	return []resource.TestStep{
+		{
+			// Step 1: Run migration and apply any creates
+			PreConfig: func() {
+				WriteOutConfig(t, v4Config, tmpDir)
+				debugLogf(t, "Running migration command for version: %s (%s -> %s)", exactVersion, sourceVersion, targetVersion)
+				RunMigrationV2Command(t, v4Config, tmpDir, sourceVersion, targetVersion)
+			},
+			ProtoV6ProviderFactories: TestAccProtoV6ProviderFactories,
+			ConfigDirectory:          config.StaticDirectory(tmpDir),
+		},
+		{
+			// Step 2: Verify final state and expect empty plan
+			ProtoV6ProviderFactories: TestAccProtoV6ProviderFactories,
+			ConfigDirectory:          config.StaticDirectory(tmpDir),
+			ConfigPlanChecks: resource.ConfigPlanChecks{
+				PreApply: []plancheck.PlanCheck{
+					DebugNonEmptyPlan,
+					ExpectEmptyPlanExceptFalseyToNull,
+				},
+			},
+			ConfigStateChecks: stateChecks,
+		},
+	}
+}
+
+// MigrationV2TestStepAllowNonEmptyPlan creates migration test steps that allow a non-empty
+// post-apply refresh plan. Use this when migration produces expected state diffs (e.g.,
+// falsey-to-null changes like name="" -> null) that require a subsequent apply to resolve.
+//
+// Parameters:
+//   - postApplyRefreshPlanChecks: plan checks to assert on the expected refresh plan diff
+//     (e.g., verify the specific attribute change). Pass nil to skip.
+//   - stateChecks: state checks to validate after the correction step.
+//
+// Step 1 runs migration, allows a non-empty refresh plan, and optionally asserts the diff.
+// Step 2 applies the correction and validates the final state is clean.
+func MigrationV2TestStepAllowNonEmptyPlan(t *testing.T, v4Config string, tmpDir string, exactVersion string, sourceVersion string, targetVersion string, postApplyRefreshPlanChecks []plancheck.PlanCheck, stateChecks []statecheck.StateCheck) []resource.TestStep {
+	return []resource.TestStep{
+		{
+			// Step 1: Run migration and apply — allow non-empty refresh plan
+			PreConfig: func() {
+				WriteOutConfig(t, v4Config, tmpDir)
+				debugLogf(t, "Running migration command for version: %s (%s -> %s)", exactVersion, sourceVersion, targetVersion)
+				RunMigrationV2Command(t, v4Config, tmpDir, sourceVersion, targetVersion)
+			},
+			ProtoV6ProviderFactories: TestAccProtoV6ProviderFactories,
+			ConfigDirectory:          config.StaticDirectory(tmpDir),
+			ExpectNonEmptyPlan:       true,
+			ConfigPlanChecks: resource.ConfigPlanChecks{
+				PreApply: []plancheck.PlanCheck{
+					DebugNonEmptyPlan,
+					ExpectEmptyPlanExceptFalseyToNull,
+				},
+				PostApplyPostRefresh: postApplyRefreshPlanChecks,
+			},
+		},
+		{
+			// Step 2: Apply correction and verify final state is clean
+			ProtoV6ProviderFactories: TestAccProtoV6ProviderFactories,
+			ConfigDirectory:          config.StaticDirectory(tmpDir),
+			ConfigPlanChecks: resource.ConfigPlanChecks{
+				PreApply: []plancheck.PlanCheck{
+					DebugNonEmptyPlan,
+					ExpectEmptyPlanExceptFalseyToNull,
+				},
+			},
+			ConfigStateChecks: stateChecks,
+		},
 	}
 }

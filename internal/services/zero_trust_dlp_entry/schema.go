@@ -21,6 +21,7 @@ var _ resource.ResourceWithConfigValidators = (*ZeroTrustDLPEntryResource)(nil)
 func ResourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
 		DeprecationMessage: "This resource is no longer used but has been split into `zero_trust_dlp_custom_entry`, `zero_trust_dlp_predefined_entry`, and `zero_trust_dlp_integration_entry`",
+		Version: 500,
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:      true,
@@ -56,6 +57,9 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 					},
 				},
 			},
+			"description": schema.StringAttribute{
+				Optional: true,
+			},
 			"type": schema.StringAttribute{
 				Description: `Available values: "custom", "predefined", "integration".`,
 				Optional:    true,
@@ -82,6 +86,20 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 				Computed:   true,
 				CustomType: timetypes.RFC3339Type{},
 			},
+			"upload_status": schema.StringAttribute{
+				Description: `Available values: "empty", "uploading", "pending", "processing", "failed", "complete".`,
+				Computed:    true,
+				Validators: []validator.String{
+					stringvalidator.OneOfCaseInsensitive(
+						"empty",
+						"uploading",
+						"pending",
+						"processing",
+						"failed",
+						"complete",
+					),
+				},
+			},
 			"confidence": schema.SingleNestedAttribute{
 				Computed:   true,
 				CustomType: customfield.NewNestedObjectType[ZeroTrustDLPEntryConfidenceModel](ctx),
@@ -93,6 +111,20 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 					"available": schema.BoolAttribute{
 						Description: "Indicates whether this entry has any form of validation that is not an AI remote service.",
 						Computed:    true,
+					},
+				},
+			},
+			"profiles": schema.ListNestedAttribute{
+				Computed:   true,
+				CustomType: customfield.NewNestedObjectListType[ZeroTrustDLPEntryProfilesModel](ctx),
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"id": schema.StringAttribute{
+							Computed: true,
+						},
+						"name": schema.StringAttribute{
+							Computed: true,
+						},
 					},
 				},
 			},

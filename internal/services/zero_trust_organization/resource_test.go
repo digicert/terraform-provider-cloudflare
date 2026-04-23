@@ -1,6 +1,7 @@
 package zero_trust_organization_test
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -9,10 +10,31 @@ import (
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/acctest"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/consts"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/utils"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
+
+func TestMain(m *testing.M) {
+	resource.TestMain(m)
+}
+
+func init() {
+	resource.AddTestSweepers("cloudflare_zero_trust_organization", &resource.Sweeper{
+		Name: "cloudflare_zero_trust_organization",
+		F:    testSweepCloudflareZeroTrustOrganization,
+	})
+}
+
+func testSweepCloudflareZeroTrustOrganization(r string) error {
+	ctx := context.Background()
+	// Zero Trust Organization is an account-level organization configuration setting.
+	// It's a singleton setting per account, not something that accumulates.
+	// No sweeping required.
+	tflog.Info(ctx, "Zero Trust Organization doesn't require sweeping (account setting)")
+	return nil
+}
 
 const DEFAULT_AUTHDOMAIN = "terraform-cfapi.cloudflareaccess.com"
 
@@ -185,4 +207,38 @@ func accessOrgImportStateCheckEmpty(instanceStates []*terraform.InstanceState) e
 	}
 
 	return nil
+}
+
+func TestAccUpgradeZeroTrustOrganization_FromPublishedV5(t *testing.T) {
+	rnd := utils.GenerateRandomResourceName()
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	headerText := "My header text"
+
+	config := testAccCloudflareAccessOrganizationConfigBasic(rnd, accountID, headerText, testAuthDomain())
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			acctest.TestAccPreCheck(t)
+		},
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.16.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+		},
+	})
 }

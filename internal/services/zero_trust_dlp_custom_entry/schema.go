@@ -20,6 +20,7 @@ var _ resource.ResourceWithConfigValidators = (*ZeroTrustDLPCustomEntryResource)
 
 func ResourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
+		Version: 500,
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:      true,
@@ -55,6 +56,9 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 					},
 				},
 			},
+			"description": schema.StringAttribute{
+				Optional: true,
+			},
 			"case_sensitive": schema.BoolAttribute{
 				Description: "Only applies to custom word lists.\nDetermines if the words should be matched in a case-sensitive manner\nCannot be set to false if secret is true",
 				Computed:    true,
@@ -84,6 +88,20 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 				Computed:   true,
 				CustomType: timetypes.RFC3339Type{},
 			},
+			"upload_status": schema.StringAttribute{
+				Description: `Available values: "empty", "uploading", "pending", "processing", "failed", "complete".`,
+				Computed:    true,
+				Validators: []validator.String{
+					stringvalidator.OneOfCaseInsensitive(
+						"empty",
+						"uploading",
+						"pending",
+						"processing",
+						"failed",
+						"complete",
+					),
+				},
+			},
 			"confidence": schema.SingleNestedAttribute{
 				Computed:   true,
 				CustomType: customfield.NewNestedObjectType[ZeroTrustDLPCustomEntryConfidenceModel](ctx),
@@ -95,6 +113,20 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 					"available": schema.BoolAttribute{
 						Description: "Indicates whether this entry has any form of validation that is not an AI remote service.",
 						Computed:    true,
+					},
+				},
+			},
+			"profiles": schema.ListNestedAttribute{
+				Computed:   true,
+				CustomType: customfield.NewNestedObjectListType[ZeroTrustDLPCustomEntryProfilesModel](ctx),
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"id": schema.StringAttribute{
+							Computed: true,
+						},
+						"name": schema.StringAttribute{
+							Computed: true,
+						},
 					},
 				},
 			},

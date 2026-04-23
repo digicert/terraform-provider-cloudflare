@@ -41,7 +41,8 @@ func testSweepCloudflareManagedTransforms(r string) error {
 	client := acctest.SharedClient()
 
 	if client == nil {
-		tflog.Error(ctx, fmt.Sprintf("Failed to create Cloudflare client"))
+		tflog.Error(ctx, "Failed to create Cloudflare client")
+		return errors.New("failed to create client")
 	}
 
 	zoneID := os.Getenv("CLOUDFLARE_ZONE_ID")
@@ -49,6 +50,7 @@ func testSweepCloudflareManagedTransforms(r string) error {
 		return errors.New("CLOUDFLARE_ZONE_ID must be set")
 	}
 
+	tflog.Info(ctx, fmt.Sprintf("Deleting managed transforms (zone: %s)", zoneID))
 	err := client.ManagedTransforms.Delete(
 		ctx,
 		managed_transforms.ManagedTransformDeleteParams{
@@ -57,9 +59,11 @@ func testSweepCloudflareManagedTransforms(r string) error {
 	)
 
 	if err != nil {
-		tflog.Error(ctx, fmt.Sprintf("Failed to delete Cloudflare managed transforms: %s", err))
+		tflog.Error(ctx, fmt.Sprintf("Failed to delete managed transforms: %s", err))
+		return err
 	}
 
+	tflog.Info(ctx, "Deleted managed transforms")
 	return nil
 }
 
@@ -894,3 +898,37 @@ func testAccCheckCloudflareManagedTransformsDestroy(s *terraform.State) error {
 // We can't test the state import when there are disabled transformations: those won't exist in
 // the new state (and there's no way to change that in `ImportState()` because it doesn't have access
 // to the previous state), so terraform would see a state diff from an import.
+
+func TestAccUpgradeManagedTransforms_FromPublishedV5(t *testing.T) {
+	rnd := utils.GenerateRandomResourceName()
+	zoneID := os.Getenv("CLOUDFLARE_ZONE_ID")
+
+	config := testAccCheckCloudflareManagedTransforms(rnd, zoneID)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			acctest.TestAccPreCheck(t)
+			cleanup(t)
+		},
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.16.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+		},
+	})
+}

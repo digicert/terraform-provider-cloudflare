@@ -36,11 +36,13 @@ type ZeroTrustAccessPoliciesResultDataSourceModel struct {
 	AppCount                     types.Int64                                                                       `tfsdk:"app_count" json:"app_count,computed"`
 	ApprovalGroups               customfield.NestedObjectSet[ZeroTrustAccessPoliciesApprovalGroupsDataSourceModel] `tfsdk:"approval_groups" json:"approval_groups,computed"`
 	ApprovalRequired             types.Bool                                                                        `tfsdk:"approval_required" json:"approval_required,computed"`
+	ConnectionRules              customfield.NestedObject[ZeroTrustAccessPoliciesConnectionRulesDataSourceModel]   `tfsdk:"connection_rules" json:"connection_rules,computed"`
 	CreatedAt                    timetypes.RFC3339                                                                 `tfsdk:"created_at" json:"created_at,computed" format:"date-time"`
 	Decision                     types.String                                                                      `tfsdk:"decision" json:"decision,computed"`
 	Exclude                      customfield.NestedObjectSet[ZeroTrustAccessPoliciesExcludeDataSourceModel]        `tfsdk:"exclude" json:"exclude,computed"`
 	Include                      customfield.NestedObjectSet[ZeroTrustAccessPoliciesIncludeDataSourceModel]        `tfsdk:"include" json:"include,computed"`
 	IsolationRequired            types.Bool                                                                        `tfsdk:"isolation_required" json:"isolation_required,computed"`
+	MfaConfig                    customfield.NestedObject[ZeroTrustAccessPoliciesMfaConfigDataSourceModel]         `tfsdk:"mfa_config" json:"mfa_config,computed"`
 	Name                         types.String                                                                      `tfsdk:"name" json:"name,computed"`
 	PurposeJustificationPrompt   types.String                                                                      `tfsdk:"purpose_justification_prompt" json:"purpose_justification_prompt,computed"`
 	PurposeJustificationRequired types.Bool                                                                        `tfsdk:"purpose_justification_required" json:"purpose_justification_required,computed"`
@@ -54,6 +56,15 @@ type ZeroTrustAccessPoliciesApprovalGroupsDataSourceModel struct {
 	ApprovalsNeeded types.Float64                  `tfsdk:"approvals_needed" json:"approvals_needed,computed"`
 	EmailAddresses  customfield.List[types.String] `tfsdk:"email_addresses" json:"email_addresses,computed"`
 	EmailListUUID   types.String                   `tfsdk:"email_list_uuid" json:"email_list_uuid,computed"`
+}
+
+type ZeroTrustAccessPoliciesConnectionRulesDataSourceModel struct {
+	RDP customfield.NestedObject[ZeroTrustAccessPoliciesConnectionRulesRDPDataSourceModel] `tfsdk:"rdp" json:"rdp,computed"`
+}
+
+type ZeroTrustAccessPoliciesConnectionRulesRDPDataSourceModel struct {
+	AllowedClipboardLocalToRemoteFormats customfield.List[types.String] `tfsdk:"allowed_clipboard_local_to_remote_formats" json:"allowed_clipboard_local_to_remote_formats,computed"`
+	AllowedClipboardRemoteToLocalFormats customfield.List[types.String] `tfsdk:"allowed_clipboard_remote_to_local_formats" json:"allowed_clipboard_remote_to_local_formats,computed"`
 }
 
 type ZeroTrustAccessPoliciesExcludeDataSourceModel struct {
@@ -81,6 +92,7 @@ type ZeroTrustAccessPoliciesExcludeDataSourceModel struct {
 	OIDC                 customfield.NestedObject[ZeroTrustAccessPoliciesExcludeOIDCDataSourceModel]                 `tfsdk:"oidc" json:"oidc,computed"`
 	ServiceToken         customfield.NestedObject[ZeroTrustAccessPoliciesExcludeServiceTokenDataSourceModel]         `tfsdk:"service_token" json:"service_token,computed"`
 	LinkedAppToken       customfield.NestedObject[ZeroTrustAccessPoliciesExcludeLinkedAppTokenDataSourceModel]       `tfsdk:"linked_app_token" json:"linked_app_token,computed"`
+	UserRiskScore        customfield.NestedObject[ZeroTrustAccessPoliciesExcludeUserRiskScoreDataSourceModel]        `tfsdk:"user_risk_score" json:"user_risk_score,computed"`
 }
 
 type ZeroTrustAccessPoliciesExcludeGroupDataSourceModel struct {
@@ -188,6 +200,10 @@ type ZeroTrustAccessPoliciesExcludeLinkedAppTokenDataSourceModel struct {
 	AppUID types.String `tfsdk:"app_uid" json:"app_uid,computed"`
 }
 
+type ZeroTrustAccessPoliciesExcludeUserRiskScoreDataSourceModel struct {
+	UserRiskScore customfield.List[types.String] `tfsdk:"user_risk_score" json:"user_risk_score,computed"`
+}
+
 type ZeroTrustAccessPoliciesIncludeDataSourceModel struct {
 	Group                customfield.NestedObject[ZeroTrustAccessPoliciesIncludeGroupDataSourceModel]                `tfsdk:"group" json:"group,computed"`
 	AnyValidServiceToken customfield.NestedObject[ZeroTrustAccessPoliciesIncludeAnyValidServiceTokenDataSourceModel] `tfsdk:"any_valid_service_token" json:"any_valid_service_token,computed"`
@@ -213,6 +229,7 @@ type ZeroTrustAccessPoliciesIncludeDataSourceModel struct {
 	OIDC                 customfield.NestedObject[ZeroTrustAccessPoliciesIncludeOIDCDataSourceModel]                 `tfsdk:"oidc" json:"oidc,computed"`
 	ServiceToken         customfield.NestedObject[ZeroTrustAccessPoliciesIncludeServiceTokenDataSourceModel]         `tfsdk:"service_token" json:"service_token,computed"`
 	LinkedAppToken       customfield.NestedObject[ZeroTrustAccessPoliciesIncludeLinkedAppTokenDataSourceModel]       `tfsdk:"linked_app_token" json:"linked_app_token,computed"`
+	UserRiskScore        customfield.NestedObject[ZeroTrustAccessPoliciesIncludeUserRiskScoreDataSourceModel]        `tfsdk:"user_risk_score" json:"user_risk_score,computed"`
 }
 
 type ZeroTrustAccessPoliciesIncludeGroupDataSourceModel struct {
@@ -320,6 +337,16 @@ type ZeroTrustAccessPoliciesIncludeLinkedAppTokenDataSourceModel struct {
 	AppUID types.String `tfsdk:"app_uid" json:"app_uid,computed"`
 }
 
+type ZeroTrustAccessPoliciesIncludeUserRiskScoreDataSourceModel struct {
+	UserRiskScore customfield.List[types.String] `tfsdk:"user_risk_score" json:"user_risk_score,computed"`
+}
+
+type ZeroTrustAccessPoliciesMfaConfigDataSourceModel struct {
+	AllowedAuthenticators customfield.List[types.String] `tfsdk:"allowed_authenticators" json:"allowed_authenticators,computed"`
+	MfaDisabled           types.Bool                     `tfsdk:"mfa_disabled" json:"mfa_disabled,computed"`
+	SessionDuration       types.String                   `tfsdk:"session_duration" json:"session_duration,computed"`
+}
+
 type ZeroTrustAccessPoliciesRequireDataSourceModel struct {
 	Group                customfield.NestedObject[ZeroTrustAccessPoliciesRequireGroupDataSourceModel]                `tfsdk:"group" json:"group,computed"`
 	AnyValidServiceToken customfield.NestedObject[ZeroTrustAccessPoliciesRequireAnyValidServiceTokenDataSourceModel] `tfsdk:"any_valid_service_token" json:"any_valid_service_token,computed"`
@@ -345,6 +372,7 @@ type ZeroTrustAccessPoliciesRequireDataSourceModel struct {
 	OIDC                 customfield.NestedObject[ZeroTrustAccessPoliciesRequireOIDCDataSourceModel]                 `tfsdk:"oidc" json:"oidc,computed"`
 	ServiceToken         customfield.NestedObject[ZeroTrustAccessPoliciesRequireServiceTokenDataSourceModel]         `tfsdk:"service_token" json:"service_token,computed"`
 	LinkedAppToken       customfield.NestedObject[ZeroTrustAccessPoliciesRequireLinkedAppTokenDataSourceModel]       `tfsdk:"linked_app_token" json:"linked_app_token,computed"`
+	UserRiskScore        customfield.NestedObject[ZeroTrustAccessPoliciesRequireUserRiskScoreDataSourceModel]        `tfsdk:"user_risk_score" json:"user_risk_score,computed"`
 }
 
 type ZeroTrustAccessPoliciesRequireGroupDataSourceModel struct {
@@ -450,4 +478,8 @@ type ZeroTrustAccessPoliciesRequireServiceTokenDataSourceModel struct {
 
 type ZeroTrustAccessPoliciesRequireLinkedAppTokenDataSourceModel struct {
 	AppUID types.String `tfsdk:"app_uid" json:"app_uid,computed"`
+}
+
+type ZeroTrustAccessPoliciesRequireUserRiskScoreDataSourceModel struct {
+	UserRiskScore customfield.List[types.String] `tfsdk:"user_risk_score" json:"user_risk_score,computed"`
 }

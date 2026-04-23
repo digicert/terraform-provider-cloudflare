@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/cloudflare/cloudflare-go/v6"
 	"github.com/cloudflare/cloudflare-go/v6/mtls_certificates"
@@ -92,6 +93,18 @@ func (r *MTLSCertificateResource) Create(ctx context.Context, req resource.Creat
 	}
 	data = &env.Result
 
+	// Get the original config value to preserve its format
+	var configData MTLSCertificateModel
+	req.Config.Get(ctx, &configData)
+
+	apiNormalized := strings.TrimRight(data.Certificates.ValueString(), "\n")
+	configNormalized := strings.TrimRight(configData.Certificates.ValueString(), "\n")
+
+	// If they match, use the config format
+	if apiNormalized == configNormalized {
+		data.Certificates = configData.Certificates
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -136,6 +149,17 @@ func (r *MTLSCertificateResource) Read(ctx context.Context, req resource.ReadReq
 	}
 	data = &env.Result
 
+	// Keep the original state format if they're semantically equal
+	var stateData MTLSCertificateModel
+	req.State.Get(ctx, &stateData)
+
+	apiNormalized := strings.TrimRight(data.Certificates.ValueString(), "\n")
+	stateNormalized := strings.TrimRight(stateData.Certificates.ValueString(), "\n")
+
+	if apiNormalized == stateNormalized {
+		data.Certificates = stateData.Certificates
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -165,7 +189,7 @@ func (r *MTLSCertificateResource) Delete(ctx context.Context, req resource.Delet
 }
 
 func (r *MTLSCertificateResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	var data *MTLSCertificateModel = new(MTLSCertificateModel)
+	var data = new(MTLSCertificateModel)
 
 	path_account_id := ""
 	path_mtls_certificate_id := ""

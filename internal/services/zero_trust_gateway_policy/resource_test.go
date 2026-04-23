@@ -60,49 +60,52 @@ func testSweepCloudflareZeroTrustGatewayPolicy(r string) error {
 	failedCount := 0
 
 	for _, rule := range rules {
+		if !utils.ShouldSweepResource(rule.Name) {
+			continue
+		}
 		tflog.Info(ctx, fmt.Sprintf("Deleting Teams Rule: %s (%s)", rule.Name, rule.ID))
-		
+
 		err := client.TeamsDeleteRule(ctx, accountID, rule.ID)
 		if err != nil {
-			tflog.Error(ctx, fmt.Sprintf("Failed to delete Teams Rule %s: %s", rule.ID, err))
+			tflog.Error(ctx, fmt.Sprintf("Failed to delete Teams Rule %s (%s): %s", rule.Name, rule.ID, err))
 			failedCount++
 			continue
 		}
-		
+
 		deletedCount++
-		tflog.Info(ctx, fmt.Sprintf("Successfully deleted Teams Rule: %s", rule.ID))
+		tflog.Info(ctx, fmt.Sprintf("Deleted Teams Rule: %s (%s)", rule.Name, rule.ID))
 	}
 
 	tflog.Info(ctx, fmt.Sprintf("Completed sweeping Teams Rules: deleted %d, failed %d", deletedCount, failedCount))
 	return nil
 }
 
-func testAccCloudflareTeamsRuleConfigDns(rnd, accountID string) string {
-	return acctest.LoadTestCase("teamsruleconfigdns.tf", rnd, accountID)
+func testAccCloudflareTeamsRuleConfigDns(rnd, accountID string, precedence int) string {
+	return acctest.LoadTestCase("teamsruleconfigdns.tf", rnd, accountID, precedence)
 }
 
-func testAccCloudflareTeamsRuleConfigDnsResolve(rnd, accountID string) string {
-	return acctest.LoadTestCase("teamsruleconfigdns-resolve.tf", rnd, accountID)
+func testAccCloudflareTeamsRuleConfigDnsResolve(rnd, accountID string, precedence int) string {
+	return acctest.LoadTestCase("teamsruleconfigdns-resolve.tf", rnd, accountID, precedence)
 }
 
-func testAccCloudflareTeamsRuleConfigHttpAllow(rnd, accountID string) string {
-	return acctest.LoadTestCase("teamsruleconfighttp.tf", rnd, accountID)
+func testAccCloudflareTeamsRuleConfigHttpAllow(rnd, accountID string, precedence int) string {
+	return acctest.LoadTestCase("teamsruleconfighttp.tf", rnd, accountID, precedence)
 }
 
-func testAccCloudflareTeamsRuleConfigHttpBlock(rnd, accountID string) string {
-	return acctest.LoadTestCase("teamsruleconfighttp-block.tf", rnd, accountID)
+func testAccCloudflareTeamsRuleConfigHttpBlock(rnd, accountID string, precedence int) string {
+	return acctest.LoadTestCase("teamsruleconfighttp-block.tf", rnd, accountID, precedence)
 }
 
-func testAccCloudflareTeamsRuleConfigHttpIsolate(rnd, accountID string) string {
-	return acctest.LoadTestCase("teamsruleconfighttp-isolate.tf", rnd, accountID)
+func testAccCloudflareTeamsRuleConfigHttpIsolate(rnd, accountID string, precedence int) string {
+	return acctest.LoadTestCase("teamsruleconfighttp-isolate.tf", rnd, accountID, precedence)
 }
 
-func testAccCloudflareTeamsRuleConfigHttpIsolateV2(rnd, accountID string) string {
-	return acctest.LoadTestCase("teamsruleconfighttp-isolate-v2.tf", rnd, accountID)
+func testAccCloudflareTeamsRuleConfigHttpIsolateV2(rnd, accountID string, precedence int) string {
+	return acctest.LoadTestCase("teamsruleconfighttp-isolate-v2.tf", rnd, accountID, precedence)
 }
 
-func testAccCloudflareTeamsRuleConfigL4(rnd, accountID string) string {
-	return acctest.LoadTestCase("teamsruleconfigl4.tf", rnd, accountID)
+func testAccCloudflareTeamsRuleConfigL4(rnd, accountID string, precedence int) string {
+	return acctest.LoadTestCase("teamsruleconfigl4.tf", rnd, accountID, precedence)
 }
 
 func TestAccCloudflareTeamsRule_Dns(t *testing.T) {
@@ -116,6 +119,7 @@ func TestAccCloudflareTeamsRule_Dns(t *testing.T) {
 	rnd := utils.GenerateRandomResourceName()
 	name := fmt.Sprintf("cloudflare_zero_trust_gateway_policy.%s", rnd)
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	precedence := utils.RandIntRange(1, 10001)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -125,12 +129,12 @@ func TestAccCloudflareTeamsRule_Dns(t *testing.T) {
 		CheckDestroy:             testAccCheckCloudflareTeamsRuleDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccCloudflareTeamsRuleConfigDns(rnd, accountID),
+				Config: testAccCloudflareTeamsRuleConfigDns(rnd, accountID, precedence),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(name, tfjsonpath.New(consts.AccountIDSchemaKey), knownvalue.StringExact(accountID)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("name"), knownvalue.StringExact(rnd)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("description"), knownvalue.StringExact("desc")),
-					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(12303)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(int64(precedence))),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("action"), knownvalue.StringExact("block")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("filters").AtSliceIndex(0), knownvalue.StringExact("dns")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("traffic"), knownvalue.StringExact("any(dns.domains[*] == \"example.com\")")),
@@ -173,6 +177,7 @@ func TestAccCloudflareTeamsRule_DNS_Resolve(t *testing.T) {
 	rnd := utils.GenerateRandomResourceName()
 	name := fmt.Sprintf("cloudflare_zero_trust_gateway_policy.%s", rnd)
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	precedence := utils.RandIntRange(1, 10001)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -182,12 +187,12 @@ func TestAccCloudflareTeamsRule_DNS_Resolve(t *testing.T) {
 		CheckDestroy:             testAccCheckCloudflareTeamsRuleDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccCloudflareTeamsRuleConfigDnsResolve(rnd, accountID),
+				Config: testAccCloudflareTeamsRuleConfigDnsResolve(rnd, accountID, precedence),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(name, tfjsonpath.New(consts.AccountIDSchemaKey), knownvalue.StringExact(accountID)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("name"), knownvalue.StringExact(rnd)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("description"), knownvalue.StringExact("desc")),
-					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(12304)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(int64(precedence))),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("action"), knownvalue.StringExact("resolve")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("filters").AtSliceIndex(0), knownvalue.StringExact("dns_resolver")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("traffic"), knownvalue.StringExact("any(dns.domains[*] == \"example.com\")")),
@@ -217,6 +222,7 @@ func TestAccCloudflareTeamsRule_HttpAllow(t *testing.T) {
 	rnd := utils.GenerateRandomResourceName()
 	name := fmt.Sprintf("cloudflare_zero_trust_gateway_policy.%s", rnd)
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	precedence := utils.RandIntRange(1, 10001)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -226,12 +232,12 @@ func TestAccCloudflareTeamsRule_HttpAllow(t *testing.T) {
 		CheckDestroy:             testAccCheckCloudflareTeamsRuleDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccCloudflareTeamsRuleConfigHttpAllow(rnd, accountID),
+				Config: testAccCloudflareTeamsRuleConfigHttpAllow(rnd, accountID, precedence),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(name, tfjsonpath.New(consts.AccountIDSchemaKey), knownvalue.StringExact(accountID)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("name"), knownvalue.StringExact(rnd)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("description"), knownvalue.StringExact("desc")),
-					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(12305)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(int64(precedence))),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("action"), knownvalue.StringExact("allow")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("filters").AtSliceIndex(0), knownvalue.StringExact("http")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("traffic"), knownvalue.StringExact("any(http.request.uri.security_category[*] in {22}) or any(http.request.uri.content_category[*] in {34})")),
@@ -263,6 +269,7 @@ func TestAccCloudflareTeamsRule_HttpBlock(t *testing.T) {
 	rnd := utils.GenerateRandomResourceName()
 	name := fmt.Sprintf("cloudflare_zero_trust_gateway_policy.%s", rnd)
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	precedence := utils.RandIntRange(1, 10001)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -272,12 +279,12 @@ func TestAccCloudflareTeamsRule_HttpBlock(t *testing.T) {
 		CheckDestroy:             testAccCheckCloudflareTeamsRuleDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccCloudflareTeamsRuleConfigHttpBlock(rnd, accountID),
+				Config: testAccCloudflareTeamsRuleConfigHttpBlock(rnd, accountID, precedence),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(name, tfjsonpath.New(consts.AccountIDSchemaKey), knownvalue.StringExact(accountID)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("name"), knownvalue.StringExact(rnd)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("description"), knownvalue.StringExact("desc")),
-					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(12306)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(int64(precedence))),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("action"), knownvalue.StringExact("block")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("filters").AtSliceIndex(0), knownvalue.StringExact("http")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("traffic"), knownvalue.StringExact("any(http.request.uri.security_category[*] in {21}) or any(http.request.uri.content_category[*] in {32})")),
@@ -308,6 +315,7 @@ func TestAccCloudflareTeamsRule_HttpIsolate(t *testing.T) {
 	rnd := utils.GenerateRandomResourceName()
 	name := fmt.Sprintf("cloudflare_zero_trust_gateway_policy.%s", rnd)
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	precedence := utils.RandIntRange(1, 10001)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -317,12 +325,12 @@ func TestAccCloudflareTeamsRule_HttpIsolate(t *testing.T) {
 		CheckDestroy:             testAccCheckCloudflareTeamsRuleDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccCloudflareTeamsRuleConfigHttpIsolate(rnd, accountID),
+				Config: testAccCloudflareTeamsRuleConfigHttpIsolate(rnd, accountID, precedence),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(name, tfjsonpath.New(consts.AccountIDSchemaKey), knownvalue.StringExact(accountID)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("name"), knownvalue.StringExact(rnd)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("description"), knownvalue.StringExact("desc")),
-					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(12307)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(int64(precedence))),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("action"), knownvalue.StringExact("isolate")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("filters").AtSliceIndex(0), knownvalue.StringExact("http")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("traffic"), knownvalue.StringExact("any(http.request.uri.security_category[*] in {21}) or any(http.request.uri.content_category[*] in {32})")),
@@ -332,7 +340,7 @@ func TestAccCloudflareTeamsRule_HttpIsolate(t *testing.T) {
 				},
 			},
 			{
-				Config: testAccCloudflareTeamsRuleConfigHttpIsolateV2(rnd, accountID),
+				Config: testAccCloudflareTeamsRuleConfigHttpIsolateV2(rnd, accountID, precedence),
 				ConfigPlanChecks: resource.ConfigPlanChecks{
 					PreApply: []plancheck.PlanCheck{
 						plancheck.ExpectResourceAction(name, plancheck.ResourceActionUpdate),
@@ -345,7 +353,7 @@ func TestAccCloudflareTeamsRule_HttpIsolate(t *testing.T) {
 					statecheck.ExpectKnownValue(name, tfjsonpath.New(consts.AccountIDSchemaKey), knownvalue.StringExact(accountID)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("name"), knownvalue.StringExact(rnd)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("description"), knownvalue.StringExact("desc")),
-					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(12307)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(int64(precedence))),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("action"), knownvalue.StringExact("isolate")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("filters").AtSliceIndex(0), knownvalue.StringExact("http")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("traffic"), knownvalue.StringExact("any(http.request.uri.security_category[*] in {21}) or any(http.request.uri.content_category[*] in {32})")),
@@ -376,6 +384,7 @@ func TestAccCloudflareTeamsRule_L4(t *testing.T) {
 	rnd := utils.GenerateRandomResourceName()
 	name := fmt.Sprintf("cloudflare_zero_trust_gateway_policy.%s", rnd)
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	precedence := utils.RandIntRange(1, 10001)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -385,12 +394,12 @@ func TestAccCloudflareTeamsRule_L4(t *testing.T) {
 		CheckDestroy:             testAccCheckCloudflareTeamsRuleDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccCloudflareTeamsRuleConfigL4(rnd, accountID),
+				Config: testAccCloudflareTeamsRuleConfigL4(rnd, accountID, precedence),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(name, tfjsonpath.New(consts.AccountIDSchemaKey), knownvalue.StringExact(accountID)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("name"), knownvalue.StringExact(rnd)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("description"), knownvalue.StringExact("desc")),
-					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(12308)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(int64(precedence))),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("action"), knownvalue.StringExact("l4_override")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("filters").AtSliceIndex(0), knownvalue.StringExact("l4")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("enabled"), knownvalue.Bool(true)),
@@ -421,6 +430,8 @@ func TestAccCloudflareTeamsRule_NoSettings(t *testing.T) {
 	rnd := utils.GenerateRandomResourceName()
 	name := fmt.Sprintf("cloudflare_zero_trust_gateway_policy.%s", rnd)
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	precedenceDns := utils.RandIntRange(1, 10001)
+	precedenceNoSettings := utils.RandIntRange(1, 10001)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -430,19 +441,19 @@ func TestAccCloudflareTeamsRule_NoSettings(t *testing.T) {
 		CheckDestroy:             testAccCheckCloudflareTeamsRuleDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccCloudflareTeamsRuleConfigDns(rnd, accountID),
+				Config: testAccCloudflareTeamsRuleConfigDns(rnd, accountID, precedenceDns),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(name, tfjsonpath.New(consts.AccountIDSchemaKey), knownvalue.StringExact(accountID)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("name"), knownvalue.StringExact(rnd)),
 				},
 			},
 			{
-				Config: testAccCloudflareTeamsRuleConfigNoSettings(rnd, accountID),
+				Config: testAccCloudflareTeamsRuleConfigNoSettings(rnd, accountID, precedenceNoSettings),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(name, tfjsonpath.New(consts.AccountIDSchemaKey), knownvalue.StringExact(accountID)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("name"), knownvalue.StringExact(rnd)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("description"), knownvalue.StringExact("desc")),
-					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(12301)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(int64(precedenceNoSettings))),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("action"), knownvalue.StringExact("block")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("filters").AtSliceIndex(0), knownvalue.StringExact("dns")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("traffic"), knownvalue.StringExact("any(dns.domains[*] == \"example.com\")")),
@@ -459,8 +470,8 @@ func TestAccCloudflareTeamsRule_NoSettings(t *testing.T) {
 	})
 }
 
-func testAccCloudflareTeamsRuleConfigNoSettings(rnd, accountID string) string {
-	return acctest.LoadTestCase("teamsruleconfignosettings.tf", rnd, accountID)
+func testAccCloudflareTeamsRuleConfigNoSettings(rnd, accountID string, precedence int) string {
+	return acctest.LoadTestCase("teamsruleconfignosettings.tf", rnd, accountID, precedence)
 }
 
 func TestAccCloudflareTeamsRule_DNS_Override(t *testing.T) {
@@ -474,6 +485,7 @@ func TestAccCloudflareTeamsRule_DNS_Override(t *testing.T) {
 	rnd := utils.GenerateRandomResourceName()
 	name := fmt.Sprintf("cloudflare_zero_trust_gateway_policy.%s", rnd)
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	precedence := utils.RandIntRange(1, 10001)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -483,12 +495,12 @@ func TestAccCloudflareTeamsRule_DNS_Override(t *testing.T) {
 		CheckDestroy:             testAccCheckCloudflareTeamsRuleDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccCloudflareTeamsRuleConfigDnsOverride(rnd, accountID),
+				Config: testAccCloudflareTeamsRuleConfigDnsOverride(rnd, accountID, precedence),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(name, tfjsonpath.New(consts.AccountIDSchemaKey), knownvalue.StringExact(accountID)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("name"), knownvalue.StringExact(rnd)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("description"), knownvalue.StringExact("DNS override policy")),
-					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(12400)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(int64(precedence))),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("action"), knownvalue.StringExact("override")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("filters").AtSliceIndex(0), knownvalue.StringExact("dns")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("traffic"), knownvalue.StringExact("any(dns.domains[*] == \"example.com\")")),
@@ -518,6 +530,7 @@ func TestAccCloudflareTeamsRule_HTTP_Redirect(t *testing.T) {
 	rnd := utils.GenerateRandomResourceName()
 	name := fmt.Sprintf("cloudflare_zero_trust_gateway_policy.%s", rnd)
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	precedence := utils.RandIntRange(1, 10001)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -527,12 +540,12 @@ func TestAccCloudflareTeamsRule_HTTP_Redirect(t *testing.T) {
 		CheckDestroy:             testAccCheckCloudflareTeamsRuleDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccCloudflareTeamsRuleConfigHttpRedirect(rnd, accountID),
+				Config: testAccCloudflareTeamsRuleConfigHttpRedirect(rnd, accountID, precedence),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(name, tfjsonpath.New(consts.AccountIDSchemaKey), knownvalue.StringExact(accountID)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("name"), knownvalue.StringExact(rnd)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("description"), knownvalue.StringExact("HTTP redirect policy")),
-					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(12401)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(int64(precedence))),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("action"), knownvalue.StringExact("redirect")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("filters").AtSliceIndex(0), knownvalue.StringExact("http")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("traffic"), knownvalue.StringExact("any(http.request.uri.security_category[*] in {25})")),
@@ -554,7 +567,7 @@ func TestAccCloudflareTeamsRule_HTTP_Redirect(t *testing.T) {
 
 func TestAccCloudflareTeamsRule_HTTP_Quarantine(t *testing.T) {
 	// SKIP: Quarantine action requires account-level feature enablement
-	// 
+	//
 	// Investigation notes:
 	// - "quarantine" IS a valid action according to:
 	//   * Terraform provider schema (schema.go:56)
@@ -562,14 +575,15 @@ func TestAccCloudflareTeamsRule_HTTP_Quarantine(t *testing.T) {
 	//   * Provider documentation (shows quarantine examples)
 	// - API returns: 400 Bad Request "invalid action \"quarantine\"" (error code 2087)
 	// - Root cause: Test account lacks required feature enablement
-	// 
+	//
 	// Possible missing prerequisites:
 	// - Enterprise plan requirement
 	// - DLP (Data Loss Prevention) feature flag
-	// - Malware scanning feature enablement  
+	// - Malware scanning feature enablement
 	rnd := utils.GenerateRandomResourceName()
 	name := fmt.Sprintf("cloudflare_zero_trust_gateway_policy.%s", rnd)
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	precedence := utils.RandIntRange(1, 10001)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -579,12 +593,12 @@ func TestAccCloudflareTeamsRule_HTTP_Quarantine(t *testing.T) {
 		CheckDestroy:             testAccCheckCloudflareTeamsRuleDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccCloudflareTeamsRuleConfigHttpQuarantine(rnd, accountID),
+				Config: testAccCloudflareTeamsRuleConfigHttpQuarantine(rnd, accountID, precedence),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(name, tfjsonpath.New(consts.AccountIDSchemaKey), knownvalue.StringExact(accountID)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("name"), knownvalue.StringExact(rnd)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("description"), knownvalue.StringExact("HTTP quarantine policy")),
-					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(12402)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(int64(precedence))),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("action"), knownvalue.StringExact("quarantine")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("filters").AtSliceIndex(0), knownvalue.StringExact("http")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("traffic"), knownvalue.StringExact("any(http.request.uri.content_category[*] in {35})")),
@@ -613,6 +627,7 @@ func TestAccCloudflareTeamsRule_HTTP_Scan(t *testing.T) {
 	rnd := utils.GenerateRandomResourceName()
 	name := fmt.Sprintf("cloudflare_zero_trust_gateway_policy.%s", rnd)
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	precedence := utils.RandIntRange(1, 10001)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -622,12 +637,12 @@ func TestAccCloudflareTeamsRule_HTTP_Scan(t *testing.T) {
 		CheckDestroy:             testAccCheckCloudflareTeamsRuleDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccCloudflareTeamsRuleConfigHttpScan(rnd, accountID),
+				Config: testAccCloudflareTeamsRuleConfigHttpScan(rnd, accountID, precedence),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(name, tfjsonpath.New(consts.AccountIDSchemaKey), knownvalue.StringExact(accountID)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("name"), knownvalue.StringExact(rnd)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("description"), knownvalue.StringExact("HTTP scan policy")),
-					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(12402)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(int64(precedence))),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("action"), knownvalue.StringExact("scan")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("filters").AtSliceIndex(0), knownvalue.StringExact("http")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("traffic"), knownvalue.StringExact("any(http.request.uri.content_category[*] in {35})")),
@@ -645,7 +660,6 @@ func TestAccCloudflareTeamsRule_HTTP_Scan(t *testing.T) {
 	})
 }
 
-
 func TestAccCloudflareTeamsRule_Egress(t *testing.T) {
 	// Temporarily unset CLOUDFLARE_API_TOKEN if it is set as the Access
 	// service does not yet support the API tokens and it results in
@@ -657,6 +671,7 @@ func TestAccCloudflareTeamsRule_Egress(t *testing.T) {
 	rnd := utils.GenerateRandomResourceName()
 	name := fmt.Sprintf("cloudflare_zero_trust_gateway_policy.%s", rnd)
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	precedence := utils.RandIntRange(1, 10001)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -666,12 +681,12 @@ func TestAccCloudflareTeamsRule_Egress(t *testing.T) {
 		CheckDestroy:             testAccCheckCloudflareTeamsRuleDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccCloudflareTeamsRuleConfigEgressLocal(rnd, accountID),
+				Config: testAccCloudflareTeamsRuleConfigEgressLocal(rnd, accountID, precedence),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(name, tfjsonpath.New(consts.AccountIDSchemaKey), knownvalue.StringExact(accountID)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("name"), knownvalue.StringExact(rnd)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("description"), knownvalue.StringExact("Local egress policy via WARP IPs")),
-					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(12403)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(int64(precedence))),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("action"), knownvalue.StringExact("egress")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("filters").AtSliceIndex(0), knownvalue.StringExact("egress")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("traffic"), knownvalue.StringExact("net.dst.port in {443 80}")),
@@ -690,24 +705,26 @@ func TestAccCloudflareTeamsRule_Egress(t *testing.T) {
 
 // TestAccCloudflareTeamsRule_EgressDedicated - Test with dedicated IPs (DISABLED)
 func TestAccCloudflareTeamsRule_EgressDedicated(t *testing.T) {
+	t.Skip("Dedicated egress IPs require Enterprise plan purchase and configuration")
 	// SKIP: Dedicated egress IPs require Enterprise plan purchase and configuration
-	// 
+	//
 	// Investigation notes:
 	// - Egress action IS valid and supported by the API
 	// - API error: "Account doesn't own dedicated primary IPv4" (error code 2055)
 	// - Root cause: Test account lacks dedicated egress IP configuration
-	// 
+	//
 	// Dedicated egress IPs are:
 	// - Enterprise feature that must be purchased ($50/month per data center)
 	// - Assigned to specific Cloudflare data centers
 	// - Consist of IPv4 address + IPv6 range
 	// - Can be Cloudflare-provided or BYOIP (Bring Your Own IP)
-	// 
+	//
 	// Alternative: Basic egress policies work without dedicated IPs (use WARP IPs)
 	//
 	rnd := utils.GenerateRandomResourceName()
 	name := fmt.Sprintf("cloudflare_zero_trust_gateway_policy.%s", rnd)
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	precedence := utils.RandIntRange(1, 10001)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -717,12 +734,12 @@ func TestAccCloudflareTeamsRule_EgressDedicated(t *testing.T) {
 		CheckDestroy:             testAccCheckCloudflareTeamsRuleDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccCloudflareTeamsRuleConfigEgressDedicated(rnd, accountID),
+				Config: testAccCloudflareTeamsRuleConfigEgressDedicated(rnd, accountID, precedence),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(name, tfjsonpath.New(consts.AccountIDSchemaKey), knownvalue.StringExact(accountID)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("name"), knownvalue.StringExact(rnd)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("description"), knownvalue.StringExact("Egress policy")),
-					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(12403)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(int64(precedence))),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("action"), knownvalue.StringExact("egress")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("filters").AtSliceIndex(0), knownvalue.StringExact("egress")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("traffic"), knownvalue.StringExact("net.dst.port in {443 80}")),
@@ -733,7 +750,6 @@ func TestAccCloudflareTeamsRule_EgressDedicated(t *testing.T) {
 		},
 	})
 }
-
 
 func TestAccCloudflareTeamsRule_SafeSearch(t *testing.T) {
 	// Temporarily unset CLOUDFLARE_API_TOKEN if it is set as the Access
@@ -746,6 +762,7 @@ func TestAccCloudflareTeamsRule_SafeSearch(t *testing.T) {
 	rnd := utils.GenerateRandomResourceName()
 	name := fmt.Sprintf("cloudflare_zero_trust_gateway_policy.%s", rnd)
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	precedence := utils.RandIntRange(1, 10001)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -755,12 +772,12 @@ func TestAccCloudflareTeamsRule_SafeSearch(t *testing.T) {
 		CheckDestroy:             testAccCheckCloudflareTeamsRuleDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccCloudflareTeamsRuleConfigSafeSearch(rnd, accountID),
+				Config: testAccCloudflareTeamsRuleConfigSafeSearch(rnd, accountID, precedence),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(name, tfjsonpath.New(consts.AccountIDSchemaKey), knownvalue.StringExact(accountID)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("name"), knownvalue.StringExact(rnd)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("description"), knownvalue.StringExact("Safe search policy")),
-					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(12404)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(int64(precedence))),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("action"), knownvalue.StringExact("safesearch")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("filters").AtSliceIndex(0), knownvalue.StringExact("dns")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("traffic"), knownvalue.StringExact("any(dns.domains[*] in {\"google.com\" \"bing.com\" \"duckduckgo.com\"})")),
@@ -792,6 +809,7 @@ func TestAccCloudflareTeamsRule_CreateBasic(t *testing.T) {
 	rnd := utils.GenerateRandomResourceName()
 	name := fmt.Sprintf("cloudflare_zero_trust_gateway_policy.%s", rnd)
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	precedence := utils.RandIntRange(1, 10001)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -801,12 +819,12 @@ func TestAccCloudflareTeamsRule_CreateBasic(t *testing.T) {
 		CheckDestroy:             testAccCheckCloudflareTeamsRuleDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccCloudflareTeamsRuleConfigBasic(rnd, accountID),
+				Config: testAccCloudflareTeamsRuleConfigBasic(rnd, accountID, precedence),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(name, tfjsonpath.New(consts.AccountIDSchemaKey), knownvalue.StringExact(accountID)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("name"), knownvalue.StringExact(rnd)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("description"), knownvalue.StringExact("Basic DNS policy for testing")),
-					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(12350)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(int64(precedence))),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("action"), knownvalue.StringExact("block")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("filters").AtSliceIndex(0), knownvalue.StringExact("dns")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("traffic"), knownvalue.StringExact("any(dns.domains[*] == \"basic.example.com\")")),
@@ -838,6 +856,8 @@ func TestAccCloudflareTeamsRule_UpdateToMaximal(t *testing.T) {
 	rnd := utils.GenerateRandomResourceName()
 	name := fmt.Sprintf("cloudflare_zero_trust_gateway_policy.%s", rnd)
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	precedenceDns := utils.RandIntRange(1, 10001)
+	precedenceMaximal := utils.RandIntRange(1, 10001)
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -848,7 +868,7 @@ func TestAccCloudflareTeamsRule_UpdateToMaximal(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				// Start with a basic but well-defined configuration
-				Config: testAccCloudflareTeamsRuleConfigDns(rnd, accountID),
+				Config: testAccCloudflareTeamsRuleConfigDns(rnd, accountID, precedenceDns),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(name, tfjsonpath.New(consts.AccountIDSchemaKey), knownvalue.StringExact(accountID)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("name"), knownvalue.StringExact(rnd)),
@@ -857,13 +877,13 @@ func TestAccCloudflareTeamsRule_UpdateToMaximal(t *testing.T) {
 			},
 			{
 				// Update to maximal configuration
-				Config: testAccCloudflareTeamsRuleConfigMaximal(rnd, accountID),
+				Config: testAccCloudflareTeamsRuleConfigMaximal(rnd, accountID, precedenceMaximal),
 				ConfigPlanChecks: resource.ConfigPlanChecks{
 					PreApply: []plancheck.PlanCheck{
 						plancheck.ExpectResourceAction(name, plancheck.ResourceActionUpdate),
 						plancheck.ExpectKnownValue(name, tfjsonpath.New("description"), knownvalue.StringExact("Maximal policy with all options")),
 						plancheck.ExpectKnownValue(name, tfjsonpath.New("enabled"), knownvalue.Bool(true)),
-						plancheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(12500)),
+						plancheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(int64(precedenceMaximal))),
 					},
 				},
 				ConfigStateChecks: []statecheck.StateCheck{
@@ -872,7 +892,7 @@ func TestAccCloudflareTeamsRule_UpdateToMaximal(t *testing.T) {
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("description"), knownvalue.StringExact("Maximal policy with all options")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("action"), knownvalue.StringExact("block")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("enabled"), knownvalue.Bool(true)),
-					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(12500)),
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("precedence"), knownvalue.Int64Exact(int64(precedenceMaximal))),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("filters").AtSliceIndex(0), knownvalue.StringExact("dns")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("traffic"), knownvalue.StringExact("any(dns.domains[*] == \"blocked.example.com\")")),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("identity"), knownvalue.StringExact("any(identity.groups.name[*] in {\"finance\"})")),
@@ -893,7 +913,6 @@ func TestAccCloudflareTeamsRule_UpdateToMaximal(t *testing.T) {
 		},
 	})
 }
-
 
 func TestAccCloudflareTeamsRule_DNS_ResolveInternal(t *testing.T) {
 	// Temporarily unset CLOUDFLARE_API_TOKEN if it is set as the Access
@@ -927,7 +946,7 @@ func TestAccCloudflareTeamsRule_DNS_ResolveInternal(t *testing.T) {
 					// Verify the DNS view was created
 					statecheck.ExpectKnownValue(viewName, tfjsonpath.New(consts.AccountIDSchemaKey), knownvalue.StringExact(accountID)),
 					statecheck.ExpectKnownValue(viewName, tfjsonpath.New("name"), knownvalue.StringExact(fmt.Sprintf("%s-view", rnd))),
-					// Verify the rule settings use the view_id 
+					// Verify the rule settings use the view_id
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("rule_settings").AtMapKey("resolve_dns_internally").AtMapKey("fallback"), knownvalue.StringExact("public_dns")),
 					// View ID should not be null - it should reference the created view
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("rule_settings").AtMapKey("resolve_dns_internally").AtMapKey("view_id"), knownvalue.NotNull()),
@@ -944,34 +963,33 @@ func TestAccCloudflareTeamsRule_DNS_ResolveInternal(t *testing.T) {
 	})
 }
 
-
 // Helper functions for test configurations
-func testAccCloudflareTeamsRuleConfigDnsOverride(rnd, accountID string) string {
-	return acctest.LoadTestCase("teamsruleconfigdns-override.tf", rnd, accountID)
+func testAccCloudflareTeamsRuleConfigDnsOverride(rnd, accountID string, precedence int) string {
+	return acctest.LoadTestCase("teamsruleconfigdns-override.tf", rnd, accountID, precedence)
 }
 
-func testAccCloudflareTeamsRuleConfigHttpRedirect(rnd, accountID string) string {
-	return acctest.LoadTestCase("teamsruleconfighttp-redirect.tf", rnd, accountID)
+func testAccCloudflareTeamsRuleConfigHttpRedirect(rnd, accountID string, precedence int) string {
+	return acctest.LoadTestCase("teamsruleconfighttp-redirect.tf", rnd, accountID, precedence)
 }
 
-func testAccCloudflareTeamsRuleConfigHttpScan(rnd, accountID string) string {
-	return acctest.LoadTestCase("teamsruleconfighttp-scan.tf", rnd, accountID)
+func testAccCloudflareTeamsRuleConfigHttpScan(rnd, accountID string, precedence int) string {
+	return acctest.LoadTestCase("teamsruleconfighttp-scan.tf", rnd, accountID, precedence)
 }
 
-func testAccCloudflareTeamsRuleConfigHttpQuarantine(rnd, accountID string) string {
-	return acctest.LoadTestCase("teamsruleconfighttp-quarantine.tf", rnd, accountID)
+func testAccCloudflareTeamsRuleConfigHttpQuarantine(rnd, accountID string, precedence int) string {
+	return acctest.LoadTestCase("teamsruleconfighttp-quarantine.tf", rnd, accountID, precedence)
 }
 
-func testAccCloudflareTeamsRuleConfigEgressLocal(rnd, accountID string) string {
-	return acctest.LoadTestCase("teamsruleconfigegress-local.tf", rnd, accountID)
+func testAccCloudflareTeamsRuleConfigEgressLocal(rnd, accountID string, precedence int) string {
+	return acctest.LoadTestCase("teamsruleconfigegress-local.tf", rnd, accountID, precedence)
 }
 
-func testAccCloudflareTeamsRuleConfigEgressDedicated(rnd, accountID string) string {
-	return acctest.LoadTestCase("teamsruleconfigegress.tf", rnd, accountID)
+func testAccCloudflareTeamsRuleConfigEgressDedicated(rnd, accountID string, precedence int) string {
+	return acctest.LoadTestCase("teamsruleconfigegress.tf", rnd, accountID, precedence)
 }
 
-func testAccCloudflareTeamsRuleConfigSafeSearch(rnd, accountID string) string {
-	return acctest.LoadTestCase("teamsruleconfigsafesearch.tf", rnd, accountID)
+func testAccCloudflareTeamsRuleConfigSafeSearch(rnd, accountID string, precedence int) string {
+	return acctest.LoadTestCase("teamsruleconfigsafesearch.tf", rnd, accountID, precedence)
 }
 
 func testAccCloudflareTeamsRuleConfigMinimalIgnoreChanges(rnd, accountID string) string {
@@ -990,12 +1008,12 @@ func testAccCloudflareTeamsRuleConfigMinimalStable(rnd, accountID string) string
 	return acctest.LoadTestCase("teamsruleconfigminimal-stable.tf", rnd, accountID)
 }
 
-func testAccCloudflareTeamsRuleConfigBasic(rnd, accountID string) string {
-	return acctest.LoadTestCase("teamsruleconfigbasic.tf", rnd, accountID)
+func testAccCloudflareTeamsRuleConfigBasic(rnd, accountID string, precedence int) string {
+	return acctest.LoadTestCase("teamsruleconfigbasic.tf", rnd, accountID, precedence)
 }
 
-func testAccCloudflareTeamsRuleConfigMaximal(rnd, accountID string) string {
-	return acctest.LoadTestCase("teamsruleconfigmaximal.tf", rnd, accountID)
+func testAccCloudflareTeamsRuleConfigMaximal(rnd, accountID string, precedence int) string {
+	return acctest.LoadTestCase("teamsruleconfigmaximal.tf", rnd, accountID, precedence)
 }
 
 func testAccCloudflareTeamsRuleConfigDnsResolveInternalWithView(rnd, accountID string) string {
@@ -1025,4 +1043,50 @@ func testAccCheckCloudflareTeamsRuleDestroy(s *terraform.State) error {
 	}
 
 	return nil
+}
+
+func TestAccUpgradeZeroTrustGatewayPolicy_FromPublishedV5(t *testing.T) {
+	rnd := utils.GenerateRandomResourceName()
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	precedence := utils.RandIntRange(1, 10001)
+
+	config := testAccCloudflareTeamsRuleConfigDns(rnd, accountID, precedence)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			acctest.TestAccPreCheck(t)
+		},
+		Steps: []resource.TestStep{
+			{
+				// Step 1: Create with v5.16.0 (schema version 0)
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.16.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				// Step 2: Upgrade to v5.17.0 (stepping stone - schema version 1)
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.17.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				// Step 3: Upgrade to current provider (schema version 500)
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+		},
+	})
 }

@@ -60,17 +60,20 @@ func testSweepCloudflareDevicePostureRule(r string) error {
 	failedCount := 0
 
 	for _, rule := range rules {
+		if !utils.ShouldSweepResource(rule.Name) {
+			continue
+		}
 		tflog.Info(ctx, fmt.Sprintf("Deleting Device Posture Rule: %s (%s)", rule.Name, rule.ID))
-		
+
 		err := client.DeleteDevicePostureRule(ctx, accountID, rule.ID)
 		if err != nil {
-			tflog.Error(ctx, fmt.Sprintf("Failed to delete Device Posture Rule %s: %s", rule.ID, err))
+			tflog.Error(ctx, fmt.Sprintf("Failed to delete Device Posture Rule %s (%s): %s", rule.Name, rule.ID, err))
 			failedCount++
 			continue
 		}
-		
+
 		deletedCount++
-		tflog.Info(ctx, fmt.Sprintf("Successfully deleted Device Posture Rule: %s", rule.ID))
+		tflog.Info(ctx, fmt.Sprintf("Deleted Device Posture Rule: %s (%s)", rule.Name, rule.ID))
 	}
 
 	tflog.Info(ctx, fmt.Sprintf("Completed sweeping Device Posture Rules: deleted %d, failed %d", deletedCount, failedCount))
@@ -111,9 +114,9 @@ func TestAccCloudflareDevicePostureRule_OsVersion(t *testing.T) {
 			},
 			// Import step
 			{
-				ResourceName:      resourceName,
-				ImportState:       true,
-				ImportStateVerify: true,
+				ResourceName:        resourceName,
+				ImportState:         true,
+				ImportStateVerify:   true,
 				ImportStateIdPrefix: fmt.Sprintf("%s/", accountID),
 			},
 		},
@@ -151,9 +154,9 @@ func TestAccCloudflareDevicePostureRule_OsVersionExtra(t *testing.T) {
 			},
 			// Import step
 			{
-				ResourceName:      resourceName,
-				ImportState:       true,
-				ImportStateVerify: true,
+				ResourceName:        resourceName,
+				ImportState:         true,
+				ImportStateVerify:   true,
 				ImportStateIdPrefix: fmt.Sprintf("%s/", accountID),
 			},
 		},
@@ -191,9 +194,9 @@ func TestAccCloudflareDevicePostureRule_LinuxOsDistro(t *testing.T) {
 			},
 			// Import step
 			{
-				ResourceName:      resourceName,
-				ImportState:       true,
-				ImportStateVerify: true,
+				ResourceName:        resourceName,
+				ImportState:         true,
+				ImportStateVerify:   true,
 				ImportStateIdPrefix: fmt.Sprintf("%s/", accountID),
 			},
 		},
@@ -229,9 +232,9 @@ func TestAccCloudflareDevicePostureRule_DomainJoined(t *testing.T) {
 			},
 			// Import step
 			{
-				ResourceName:      resourceName,
-				ImportState:       true,
-				ImportStateVerify: true,
+				ResourceName:        resourceName,
+				ImportState:         true,
+				ImportStateVerify:   true,
 				ImportStateIdPrefix: fmt.Sprintf("%s/", accountID),
 			},
 		},
@@ -262,16 +265,16 @@ func TestAccCloudflareDevicePostureRule_Firewall(t *testing.T) {
 					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("type"), knownvalue.StringExact("firewall")),
 					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("description"), knownvalue.StringExact("firewall description")),
 					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("schedule"), knownvalue.StringExact("24h")),
-					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("expiration"), knownvalue.StringExact("24h")),
+					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("expiration"), knownvalue.StringExact("25h")),
 					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("match").AtSliceIndex(0).AtMapKey("platform"), knownvalue.StringExact("windows")),
 					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("input").AtMapKey("enabled"), knownvalue.Bool(true)),
 				},
 			},
 			// Import step
 			{
-				ResourceName:      resourceName,
-				ImportState:       true,
-				ImportStateVerify: true,
+				ResourceName:        resourceName,
+				ImportState:         true,
+				ImportStateVerify:   true,
 				ImportStateIdPrefix: fmt.Sprintf("%s/", accountID),
 			},
 		},
@@ -302,16 +305,16 @@ func TestAccCloudflareDevicePostureRule_DiskEncryption_RequireAll(t *testing.T) 
 					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("type"), knownvalue.StringExact("disk_encryption")),
 					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("description"), knownvalue.StringExact("My description")),
 					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("schedule"), knownvalue.StringExact("24h")),
-					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("expiration"), knownvalue.StringExact("24h")),
+					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("expiration"), knownvalue.StringExact("25h")),
 					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("match").AtSliceIndex(0).AtMapKey("platform"), knownvalue.StringExact("mac")),
 					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("input").AtMapKey("require_all"), knownvalue.Bool(true)),
 				},
 			},
 			// Import step
 			{
-				ResourceName:      resourceName,
-				ImportState:       true,
-				ImportStateVerify: true,
+				ResourceName:        resourceName,
+				ImportState:         true,
+				ImportStateVerify:   true,
 				ImportStateIdPrefix: fmt.Sprintf("%s/", accountID),
 			},
 		},
@@ -342,7 +345,7 @@ func TestAccCloudflareDevicePostureRule_DiskEncryption_CheckDisks(t *testing.T) 
 					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("type"), knownvalue.StringExact("disk_encryption")),
 					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("description"), knownvalue.StringExact("My description")),
 					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("schedule"), knownvalue.StringExact("24h")),
-					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("expiration"), knownvalue.StringExact("24h")),
+					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("expiration"), knownvalue.StringExact("25h")),
 					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("match").AtSliceIndex(0).AtMapKey("platform"), knownvalue.StringExact("mac")),
 					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("input").AtMapKey("require_all"), knownvalue.Bool(false)),
 					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("input").AtMapKey("check_disks").AtSliceIndex(0), knownvalue.StringExact("C")),
@@ -351,9 +354,9 @@ func TestAccCloudflareDevicePostureRule_DiskEncryption_CheckDisks(t *testing.T) 
 			},
 			// Import step
 			{
-				ResourceName:      resourceName,
-				ImportState:       true,
-				ImportStateVerify: true,
+				ResourceName:        resourceName,
+				ImportState:         true,
+				ImportStateVerify:   true,
 				ImportStateIdPrefix: fmt.Sprintf("%s/", accountID),
 			},
 		},
@@ -419,9 +422,9 @@ func TestAccCloudflareDevicePostureRule_File(t *testing.T) {
 			},
 			// Import step
 			{
-				ResourceName:      resourceName,
-				ImportState:       true,
-				ImportStateVerify: true,
+				ResourceName:        resourceName,
+				ImportState:         true,
+				ImportStateVerify:   true,
 				ImportStateIdPrefix: fmt.Sprintf("%s/", accountID),
 			},
 		},
@@ -456,9 +459,9 @@ func TestAccCloudflareDevicePostureRule_Application(t *testing.T) {
 			},
 			// Import step
 			{
-				ResourceName:      resourceName,
-				ImportState:       true,
-				ImportStateVerify: true,
+				ResourceName:        resourceName,
+				ImportState:         true,
+				ImportStateVerify:   true,
 				ImportStateIdPrefix: fmt.Sprintf("%s/", accountID),
 			},
 		},
@@ -505,9 +508,9 @@ func TestAccCloudflareDevicePostureRule_ClientCertificate(t *testing.T) {
 			},
 			// Import step
 			{
-				ResourceName:      resourceName,
-				ImportState:       true,
-				ImportStateVerify: true,
+				ResourceName:        resourceName,
+				ImportState:         true,
+				ImportStateVerify:   true,
 				ImportStateIdPrefix: fmt.Sprintf("%s/", accountID),
 			},
 		},
@@ -554,9 +557,9 @@ func TestAccCloudflareDevicePostureRule_SentinelOne(t *testing.T) {
 			},
 			// Import step
 			{
-				ResourceName:      resourceName,
-				ImportState:       true,
-				ImportStateVerify: true,
+				ResourceName:        resourceName,
+				ImportState:         true,
+				ImportStateVerify:   true,
 				ImportStateIdPrefix: fmt.Sprintf("%s/", accountID),
 			},
 		},
@@ -599,9 +602,9 @@ func TestAccCloudflareDevicePostureRule_Tanium(t *testing.T) {
 			},
 			// Import step
 			{
-				ResourceName:      resourceName,
-				ImportState:       true,
-				ImportStateVerify: true,
+				ResourceName:        resourceName,
+				ImportState:         true,
+				ImportStateVerify:   true,
 				ImportStateIdPrefix: fmt.Sprintf("%s/", accountID),
 			},
 		},
@@ -635,9 +638,9 @@ func TestAccCloudflareDevicePostureRule_SerialNumber(t *testing.T) {
 			},
 			// Import step
 			{
-				ResourceName:      resourceName,
-				ImportState:       true,
-				ImportStateVerify: true,
+				ResourceName:        resourceName,
+				ImportState:         true,
+				ImportStateVerify:   true,
 				ImportStateIdPrefix: fmt.Sprintf("%s/", accountID),
 			},
 		},
@@ -694,9 +697,9 @@ func TestAccCloudflareDevicePostureRule_Update(t *testing.T) {
 			},
 			// Import step
 			{
-				ResourceName:      resourceName,
-				ImportState:       true,
-				ImportStateVerify: true,
+				ResourceName:        resourceName,
+				ImportState:         true,
+				ImportStateVerify:   true,
 				ImportStateIdPrefix: fmt.Sprintf("%s/", accountID),
 			},
 		},
@@ -750,4 +753,39 @@ func testAccCheckCloudflareDevicePostureRuleDestroy(s *terraform.State) error {
 	}
 
 	return nil
+}
+
+func TestAccUpgradeZeroTrustDevicePostureRule_FromPublishedV5(t *testing.T) {
+	t.Skip("Failed to marshal state to json: schema version 0 in state does not match version 1 from the provider")
+	// we want to test from v5
+	if os.Getenv("TF_MIG_TEST") != "" {
+		os.Setenv("TF_MIG_TEST", "")
+	}
+	rnd := utils.GenerateRandomResourceName()
+
+	config := testAccCloudflareDevicePostureRuleConfigOsVersion(rnd, accountID)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() { acctest.TestAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.16.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+		},
+	})
 }

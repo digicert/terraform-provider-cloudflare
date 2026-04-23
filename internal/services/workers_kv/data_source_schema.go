@@ -5,6 +5,7 @@ package workers_kv
 import (
 	"context"
 
+	"github.com/hashicorp/terraform-plugin-framework-jsontypes/jsontypes"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 )
@@ -14,17 +15,25 @@ var _ datasource.DataSourceWithConfigValidators = (*WorkersKVDataSource)(nil)
 func DataSourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
 		Attributes: map[string]schema.Attribute{
-			"account_id": schema.StringAttribute{
-				Description: "Identifier.",
-				Required:    true,
+			"id": schema.StringAttribute{
+				Description: "A key's name. The name may be at most 512 bytes. All printable, non-whitespace characters are valid. Use percent-encoding to define key names as part of a URL.",
+				Computed:    true,
 			},
 			"key_name": schema.StringAttribute{
 				Description: "A key's name. The name may be at most 512 bytes. All printable, non-whitespace characters are valid. Use percent-encoding to define key names as part of a URL.",
 				Required:    true,
 			},
+			"account_id": schema.StringAttribute{
+				Description: "Identifier.",
+				Required:    true,
+			},
 			"namespace_id": schema.StringAttribute{
 				Description: "Namespace identifier tag.",
 				Required:    true,
+			},
+			"value": schema.StringAttribute{
+				Computed:   true,
+				CustomType: jsontypes.NormalizedType{},
 			},
 		},
 	}

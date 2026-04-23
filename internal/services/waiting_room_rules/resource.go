@@ -122,7 +122,7 @@ func (r *WaitingRoomRulesResource) Update(ctx context.Context, req resource.Upda
 	env := WaitingRoomRulesResultEnvelope{data.Rules}
 	_, err = r.client.WaitingRooms.Rules.Update(
 		ctx,
-		data.ID.ValueString(),
+		data.WaitingRoomID.ValueString(),
 		waiting_rooms.RuleUpdateParams{
 			ZoneID: cloudflare.F(data.ZoneID.ValueString()),
 		},
@@ -158,7 +158,7 @@ func (r *WaitingRoomRulesResource) Read(ctx context.Context, req resource.ReadRe
 	env := WaitingRoomRulesResultEnvelope{data.Rules}
 	_, err := r.client.WaitingRooms.Rules.Get(
 		ctx,
-		data.ID.ValueString(),
+		data.WaitingRoomID.ValueString(),
 		waiting_rooms.RuleGetParams{
 			ZoneID: cloudflare.F(data.ZoneID.ValueString()),
 		},
@@ -214,7 +214,7 @@ func (r *WaitingRoomRulesResource) Delete(ctx context.Context, req resource.Dele
 }
 
 func (r *WaitingRoomRulesResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	var data *WaitingRoomRulesModel = new(WaitingRoomRulesModel)
+	var data = new(WaitingRoomRulesModel)
 
 	path_zone_id := ""
 	path_waiting_room_id := ""

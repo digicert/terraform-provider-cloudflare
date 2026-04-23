@@ -22,7 +22,7 @@ resource "cloudflare_cloud_connector_rules" "example_cloud_connector_rules" {
     parameters = {
       host = "examplebucket.s3.eu-north-1.amazonaws.com"
     }
-    provider = "aws_s3"
+    cloud_connector_rules_provider = "aws_s3"
   }]
 }
 ```
@@ -72,3 +72,5 @@ Import is supported using the following syntax:
 ```shell
 $ terraform import cloudflare_cloud_connector_rules.example '<zone_id>'
 ```
+
+

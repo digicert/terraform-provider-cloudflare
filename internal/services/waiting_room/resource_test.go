@@ -9,8 +9,9 @@ import (
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/acctest"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/consts"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/utils"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
@@ -29,22 +30,37 @@ func init() {
 func testSweepCloudflareWaitingRoom(r string) error {
 	ctx := context.Background()
 	zoneID := os.Getenv("CLOUDFLARE_ZONE_ID")
+	if zoneID == "" {
+		tflog.Info(ctx, "Skipping waiting rooms sweep: CLOUDFLARE_ZONE_ID not set")
+		return nil
+	}
 
 	client, clientErr := acctest.SharedV1Client() // TODO(terraform): replace with SharedV2Clent
 	if clientErr != nil {
-		tflog.Error(ctx, fmt.Sprintf("Failed to create Cloudflare client: %s", clientErr))
+		tflog.Error(ctx, fmt.Sprintf("Failed to create Cloudflare client: %s",clientErr))
+		return clientErr
 	}
-
 	resp, err := client.ListWaitingRooms(ctx, zoneID)
 	if err != nil {
+		tflog.Error(ctx, fmt.Sprintf("Failed to fetch waiting rooms: %s",err))
 		return err
+	}
+	if len(resp) == 0 {
+		tflog.Info(ctx, "No Cloudflare waiting rooms to sweep")
+		return nil
 	}
 
 	for _, room := range resp {
+		if !utils.ShouldSweepResource(room.Name) {
+			continue
+		}
+		tflog.Info(ctx, fmt.Sprintf("Deleting waiting room: %s (%s)", room.Name, room.ID))
 		err := client.DeleteWaitingRoom(ctx, zoneID, room.ID)
 		if err != nil {
-			return err
+			tflog.Error(ctx, fmt.Sprintf("Failed to delete waiting room %s (%s): %s", room.Name, room.ID,err))
+			continue
 		}
+		tflog.Info(ctx, fmt.Sprintf("Deleted waiting room: %s (%s)", room.Name, room.ID))
 	}
 
 	return nil
@@ -95,7 +111,7 @@ func TestAccCloudflareWaitingRoom_Create(t *testing.T) {
 func testAccCheckCloudflareWaitingRoomDestroy(s *terraform.State) error {
 	client, clientErr := acctest.SharedV1Client() // TODO(terraform): replace with SharedV2Clent
 	if clientErr != nil {
-		tflog.Error(context.TODO(), fmt.Sprintf("failed to create Cloudflare client: %s", clientErr))
+		tflog.Error(context.TODO(), fmt.Sprintf("failed to create Cloudflare client: %s",clientErr))
 	}
 
 	for _, rs := range s.RootModule().Resources {
@@ -114,4 +130,37 @@ func testAccCheckCloudflareWaitingRoomDestroy(s *terraform.State) error {
 
 func testAccCloudflareWaitingRoom(resourceName, waitingRoomName, zoneID, domain, path string) string {
 	return acctest.LoadTestCase("waitingroom.tf", resourceName, waitingRoomName, zoneID, domain, path)
+}
+
+func TestAccUpgradeWaitingRoom_FromPublishedV5(t *testing.T) {
+	zoneID := os.Getenv("CLOUDFLARE_ZONE_ID")
+	domain := os.Getenv("CLOUDFLARE_DOMAIN")
+	rnd := utils.GenerateRandomResourceName()
+	waitingRoomName := fmt.Sprintf("waiting_room_%s", rnd)
+
+	config := testAccCloudflareWaitingRoom(rnd, waitingRoomName, zoneID, domain, "/foobar")
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() { acctest.TestAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.16.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+		},
+	})
 }

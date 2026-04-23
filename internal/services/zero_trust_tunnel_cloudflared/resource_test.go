@@ -7,13 +7,99 @@ import (
 	"testing"
 
 	"github.com/cloudflare/cloudflare-go"
+	cloudflare6 "github.com/cloudflare/cloudflare-go/v6"
+	"github.com/cloudflare/cloudflare-go/v6/option"
+	"github.com/cloudflare/cloudflare-go/v6/zero_trust"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/acctest"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/consts"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/utils"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
+
+func TestMain(m *testing.M) {
+	resource.TestMain(m)
+}
+
+func init() {
+	resource.AddTestSweepers("cloudflare_zero_trust_tunnel_cloudflared", &resource.Sweeper{
+		Name: "cloudflare_zero_trust_tunnel_cloudflared",
+		F:    testSweepCloudflareZeroTrustTunnelCloudflared,
+	})
+}
+
+func testSweepCloudflareZeroTrustTunnelCloudflared(region string) error {
+	ctx := context.Background()
+	client := acctest.SharedClient()
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+
+	if accountID == "" {
+		tflog.Info(ctx, "Skipping cloudflared tunnels sweep: CLOUDFLARE_ACCOUNT_ID not set")
+		return nil
+	}
+
+	page, err := client.ZeroTrust.Tunnels.Cloudflared.List(
+		ctx,
+		zero_trust.TunnelCloudflaredListParams{
+			AccountID: cloudflare6.F(accountID),
+		},
+	)
+	if err != nil {
+		tflog.Error(ctx, fmt.Sprintf("Failed to list cloudflared tunnels: %s", err))
+		return fmt.Errorf("error listing cloudflared tunnels for sweep: %w", err)
+	}
+
+	tunnelCount := 0
+	for page != nil && len(page.Result) > 0 {
+		for _, tunnel := range page.Result {
+			if tunnel.ID == "" {
+				tflog.Debug(ctx, fmt.Sprintf("Skipping cloudflared tunnel with empty ID: %s", tunnel.Name))
+				continue
+			}
+
+			if !tunnel.DeletedAt.IsZero() {
+				tflog.Debug(ctx, fmt.Sprintf("Skipping already deleted cloudflared tunnel: %s (%s)", tunnel.Name, tunnel.ID))
+				continue
+			}
+
+			if !utils.ShouldSweepResource(tunnel.Name) {
+				continue
+			}
+
+			tunnelCount++
+			tflog.Info(ctx, fmt.Sprintf("Deleting cloudflared tunnel: %s (%s) (account: %s)", tunnel.Name, tunnel.ID, accountID))
+
+			_, err := client.ZeroTrust.Tunnels.Cloudflared.Delete(
+				ctx,
+				tunnel.ID,
+				zero_trust.TunnelCloudflaredDeleteParams{
+					AccountID: cloudflare6.F(accountID),
+				},
+				option.WithQuery("cascade", "true"),
+			)
+			if err != nil {
+				tflog.Error(ctx, fmt.Sprintf("Failed to delete cloudflared tunnel %s: %s", tunnel.ID, err))
+				continue
+			}
+
+			tflog.Info(ctx, fmt.Sprintf("Deleted cloudflared tunnel: %s with cascade", tunnel.ID))
+		}
+
+		page, err = page.GetNextPage()
+		if err != nil {
+			tflog.Error(ctx, fmt.Sprintf("Failed to get next page of tunnels: %s", err))
+			break
+		}
+	}
+
+	if tunnelCount == 0 {
+		tflog.Info(ctx, "No cloudflared tunnels to sweep")
+	}
+
+	return nil
+}
 
 func TestAccCloudflareTunnelCreate_Basic(t *testing.T) {
 	// Temporarily unset CLOUDFLARE_API_TOKEN if it is set as the Argo Tunnel
@@ -183,4 +269,37 @@ func TestAccCloudflareTunnelRotateSecret(t *testing.T) {
 
 func testAccCheckCloudflareTunnelRotateSecret(accID, name, secret string) string {
 	return acctest.LoadTestCase("tunnelsecret.tf", accID, name, secret)
+}
+
+func TestAccUpgradeZeroTrustTunnelCloudflared_FromPublishedV5(t *testing.T) {
+	accID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	rnd := utils.GenerateRandomResourceName()
+
+	config := testAccCheckCloudflareTunnelBasic(accID, rnd)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			acctest.TestAccPreCheck(t)
+		},
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.16.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+		},
+	})
 }

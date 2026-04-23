@@ -25,6 +25,7 @@ var _ resource.ResourceWithConfigValidators = (*StreamLiveInputResource)(nil)
 
 func ResourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
+		Version: 500,
 		Attributes: map[string]schema.Attribute{
 			"account_id": schema.StringAttribute{
 				Description:   "Identifier.",
@@ -51,6 +52,12 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 				Description: "A user modifiable key-value store used to reference other systems of record for managing live inputs.",
 				Optional:    true,
 				CustomType:  jsontypes.NormalizedType{},
+			},
+			"enabled": schema.BoolAttribute{
+				Description: "Indicates whether the live input is enabled and can accept streams.",
+				Computed:    true,
+				Optional:    true,
+				Default:     booldefault.StaticBool(true),
 			},
 			"recording": schema.SingleNestedAttribute{
 				Description: "Records the input to a Cloudflare Stream video. Behavior depends on the mode. In most cases, the video will initially be viewable as a live video and transition to on-demand after a condition is satisfied.",

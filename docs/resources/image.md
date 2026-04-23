@@ -16,7 +16,7 @@ resource "cloudflare_image" "example_image" {
   account_id = "023e105f4ecef8ad9ca31a8372d0c353"
   id = "id"
   creator = "creator"
-  file = null
+  file = "Example data"
   metadata = {
 
   }
@@ -55,3 +55,5 @@ Import is supported using the following syntax:
 ```shell
 $ terraform import cloudflare_image.example '<account_id>/<image_id>'
 ```
+
+

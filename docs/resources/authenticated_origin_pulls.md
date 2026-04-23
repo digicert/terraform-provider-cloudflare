@@ -30,10 +30,6 @@ resource "cloudflare_authenticated_origin_pulls" "example_authenticated_origin_p
 - `config` (Attributes List) (see [below for nested schema](#nestedatt--config))
 - `zone_id` (String) Identifier.
 
-### Optional
-
-- `hostname` (String) The hostname on the origin for which the client certificate uploaded will be used.
-
 ### Read-Only
 
 - `cert_id` (String) Identifier.
@@ -45,7 +41,8 @@ Available values: "initializing", "pending_deployment", "pending_deletion", "act
 - `created_at` (String) The time when the certificate was created.
 - `enabled` (Boolean) Indicates whether hostname-level authenticated origin pulls is enabled. A null value voids the association.
 - `expires_on` (String) The date when the certificate expires.
-- `id` (String) Identifier.
+- `hostname` (String) The hostname on the origin for which the client certificate uploaded will be used.
+- `id` (String) The hostname on the origin for which the client certificate uploaded will be used.
 - `issuer` (String) The certificate authority that issued the certificate.
 - `private_key` (String, Sensitive) The hostname certificate's private key.
 - `serial_number` (String) The serial number on the uploaded certificate.
@@ -62,5 +59,13 @@ Optional:
 - `cert_id` (String) Certificate identifier tag.
 - `enabled` (Boolean) Indicates whether hostname-level authenticated origin pulls is enabled. A null value voids the association.
 - `hostname` (String) The hostname on the origin for which the client certificate uploaded will be used.
+
+## Import
+
+Import is supported using the following syntax:
+
+```shell
+$ terraform import cloudflare_authenticated_origin_pulls.example '<zone_id>/<hostname>'
+```
 
 

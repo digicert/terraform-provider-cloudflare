@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"testing"
 
@@ -36,7 +35,7 @@ func init() {
 func testSweepCloudflareTunnelVirtualNetwork(r string) error {
 	ctx := context.Background()
 
-	client := acctest.SharedClient() // TODO(terraform): replace with SharedV2Clent
+	client := acctest.SharedClient()
 
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
 	if accountID == "" {
@@ -44,28 +43,38 @@ func testSweepCloudflareTunnelVirtualNetwork(r string) error {
 	}
 
 	tunnelVirtualNetworks, err := client.ZeroTrust.Networks.VirtualNetworks.List(
-		context.Background(), zero_trust.NetworkVirtualNetworkListParams{
+		ctx, zero_trust.NetworkVirtualNetworkListParams{
 			AccountID: cloudflare.F(accountID),
 		})
 	if err != nil {
-		tflog.Error(ctx, fmt.Sprintf("Failed to fetch Cloudflare Tunnel Virtual Networks: %s", err))
+		tflog.Error(ctx, fmt.Sprintf("Failed to fetch tunnel virtual networks: %s", err))
 		return err
 	}
 
 	if len(tunnelVirtualNetworks.Result) == 0 {
-		log.Print("[DEBUG] No Cloudflare Tunnel Virtual Networks to sweep")
+		tflog.Info(ctx, "No tunnel virtual networks to sweep")
 		return nil
 	}
 
 	for _, vnet := range tunnelVirtualNetworks.Result {
-		tflog.Info(ctx, fmt.Sprintf("Deleting Cloudflare Tunnel Virtual Network %s", vnet.ID))
-		//nolint:errcheck
-		client.ZeroTrust.Networks.VirtualNetworks.Delete(
-			context.Background(), vnet.ID, zero_trust.NetworkVirtualNetworkDeleteParams{
-				AccountID: cloudflare.F(accountID),
-			})
-	}
+		if !utils.ShouldSweepResource(vnet.Name) {
+			continue
+		}
+		tflog.Info(ctx, fmt.Sprintf("Deleting tunnel virtual network: %s (%s) (account: %s)", vnet.Name, vnet.ID, accountID))
 
+		_, err = client.ZeroTrust.Networks.VirtualNetworks.Delete(
+			ctx,
+			vnet.ID,
+			zero_trust.NetworkVirtualNetworkDeleteParams{
+				AccountID: cloudflare.F(accountID),
+			},
+		)
+		if err != nil {
+			tflog.Error(ctx, fmt.Sprintf("Failed to delete tunnel virtual network %s: %s", vnet.ID, err))
+			continue
+		}
+		tflog.Info(ctx, fmt.Sprintf("Deleted tunnel virtual network: %s", vnet.ID))
+	}
 	return nil
 }
 
@@ -178,7 +187,7 @@ func TestAccCloudflareTunnelVirtualNetwork_Minimal(t *testing.T) {
 				Config: testAccCloudflareTunnelVirtualNetworkMinimal(rnd, accountID),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("name"), knownvalue.StringExact(rnd)),
-					statecheck.ExpectKnownValue(name, tfjsonpath.New("comment"), knownvalue.StringExact("")), // Default value
+					statecheck.ExpectKnownValue(name, tfjsonpath.New("comment"), knownvalue.StringExact("")),        // Default value
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("is_default_network"), knownvalue.Bool(false)), // Default value
 					statecheck.ExpectKnownValue(name, tfjsonpath.New(consts.AccountIDSchemaKey), knownvalue.StringExact(accountID)),
 					statecheck.ExpectKnownValue(name, tfjsonpath.New("id"), knownvalue.NotNull()),
@@ -196,7 +205,6 @@ func TestAccCloudflareTunnelVirtualNetwork_Minimal(t *testing.T) {
 	})
 }
 
-
 func testAccCloudflareTunnelVirtualNetworkSimple(ID, comment, accountID, name string, isDefault bool) string {
 	return acctest.LoadTestCase("tunnelvirtualnetworksimple.tf", ID, comment, accountID, name, isDefault)
 }
@@ -209,4 +217,36 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_virtual_network" "%s" {
 }`, name, accountID, name)
 }
 
+func TestAccUpgradeZeroTrustTunnelCloudflaredVirtualNetwork_FromPublishedV5(t *testing.T) {
+	rnd := utils.GenerateRandomResourceName()
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
 
+	config := testAccCloudflareTunnelVirtualNetworkSimple(rnd, rnd, accountID, rnd, false)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			acctest.TestAccPreCheck(t)
+			acctest.TestAccPreCheck_AccountID(t)
+		},
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.16.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+		},
+	})
+}

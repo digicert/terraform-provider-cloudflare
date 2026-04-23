@@ -113,7 +113,7 @@ func (r *StreamKeyResource) Read(ctx context.Context, req resource.ReadRequest, 
 	_, err := r.client.Stream.Keys.Get(
 		ctx,
 		stream.KeyGetParams{
-			AccountID: cloudflare.F(data.ID.ValueString()),
+			AccountID: cloudflare.F(data.AccountID.ValueString()),
 		},
 		option.WithResponseBodyInto(&res),
 		option.WithMiddleware(logging.Middleware(ctx)),
@@ -164,7 +164,7 @@ func (r *StreamKeyResource) Delete(ctx context.Context, req resource.DeleteReque
 }
 
 func (r *StreamKeyResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	var data *StreamKeyModel = new(StreamKeyModel)
+	var data = new(StreamKeyModel)
 
 	path := ""
 	diags := importpath.ParseImportID(

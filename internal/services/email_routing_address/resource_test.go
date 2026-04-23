@@ -6,9 +6,13 @@ import (
 	"os"
 	"testing"
 
-	cfv1 "github.com/cloudflare/cloudflare-go"
+	"github.com/cloudflare/cloudflare-go/v6"
+	"github.com/cloudflare/cloudflare-go/v6/email_routing"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/acctest"
+	"github.com/cloudflare/terraform-provider-cloudflare/internal/utils"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 )
 
 func TestMain(m *testing.M) {
@@ -19,24 +23,42 @@ func init() {
 	resource.AddTestSweepers("cloudflare_email_routing_address", &resource.Sweeper{
 		Name: "cloudflare_email_routing_address",
 		F: func(region string) error {
-			client, err := acctest.SharedV1Client() // TODO(terraform): replace with SharedV2Clent
+			client := acctest.SharedClient()
 			accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+			ctx := context.Background()
 
-			if err != nil {
-				return fmt.Errorf("error establishing client: %w", err)
+			if accountID == "" {
+				tflog.Info(ctx, "Skipping email routing addresses sweep: CLOUDFLARE_ACCOUNT_ID not set")
+				return nil
 			}
 
-			ctx := context.Background()
-			emails, _, err := client.ListEmailRoutingDestinationAddresses(ctx, cfv1.AccountIdentifier(accountID), cfv1.ListEmailRoutingAddressParameters{})
+			addresses, err := client.EmailRouting.Addresses.List(ctx, email_routing.AddressListParams{
+				AccountID: cloudflare.F(accountID),
+			})
 			if err != nil {
+				tflog.Error(ctx, fmt.Sprintf("Failed to fetch email routing addresses: %s", err))
 				return fmt.Errorf("failed to fetch email routing destination addresses: %w", err)
 			}
 
-			for _, email := range emails {
-				_, err := client.DeleteEmailRoutingDestinationAddress(ctx, cfv1.AccountIdentifier(accountID), email.Tag)
-				if err != nil {
-					return fmt.Errorf("failed to delete email routing destination address %q: %w", email.Email, err)
+			addressList := addresses.Result
+			if len(addressList) == 0 {
+				tflog.Info(ctx, "No email routing addresses to sweep")
+				return nil
+			}
+
+			for _, address := range addressList {
+				if !utils.ShouldSweepResource(address.Email) {
+					continue
 				}
+				tflog.Info(ctx, fmt.Sprintf("Deleting email routing address: %s (%s) (account: %s)", address.Email, address.Tag, accountID))
+				_, err := client.EmailRouting.Addresses.Delete(ctx, address.Tag, email_routing.AddressDeleteParams{
+					AccountID: cloudflare.F(accountID),
+				})
+				if err != nil {
+					tflog.Error(ctx, fmt.Sprintf("Failed to delete email routing address %s: %s", address.Email, err))
+					continue
+				}
+				tflog.Info(ctx, fmt.Sprintf("Deleted email routing address: %s", address.Tag))
 			}
 
 			return nil
@@ -78,4 +100,35 @@ func init() {
 
 func testAccCheckCloudflareEmailRoutingAddress(rnd, accountID string) string {
 	return acctest.LoadTestCase("emailroutingaddress.tf", rnd, accountID)
+}
+
+func TestAccUpgradeEmailRoutingAddress_FromPublishedV5(t *testing.T) {
+	rnd := utils.GenerateRandomResourceName()
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+
+	config := testAccCheckCloudflareEmailRoutingAddress(rnd, accountID)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() { acctest.TestAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.16.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+		},
+	})
 }

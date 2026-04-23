@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"regexp"
 	"testing"
@@ -39,6 +38,7 @@ func testSweepCloudflareTunnelRoute(r string) error {
 	client, clientErr := acctest.SharedV1Client() // TODO(terraform): replace with SharedV2Clent
 	if clientErr != nil {
 		tflog.Error(ctx, fmt.Sprintf("Failed to create Cloudflare client: %s", clientErr))
+		return clientErr
 	}
 
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
@@ -46,20 +46,32 @@ func testSweepCloudflareTunnelRoute(r string) error {
 		return errors.New("CLOUDFLARE_ACCOUNT_ID must be set")
 	}
 	isDeleted := false
-	tunnelRoutes, err := client.ListTunnelRoutes(context.Background(), cloudflare.AccountIdentifier(accountID), cloudflare.TunnelRoutesListParams{IsDeleted: &isDeleted})
+	tunnelRoutes, err := client.ListTunnelRoutes(ctx, cloudflare.AccountIdentifier(accountID), cloudflare.TunnelRoutesListParams{IsDeleted: &isDeleted})
 	if err != nil {
-		tflog.Error(ctx, fmt.Sprintf("Failed to fetch Cloudflare Tunnel Routes: %s", err))
+		tflog.Error(ctx, fmt.Sprintf("Failed to fetch tunnel routes: %s", err))
+		return err
 	}
 
 	if len(tunnelRoutes) == 0 {
-		log.Print("[DEBUG] No Cloudflare Tunnel Routes to sweep")
+		tflog.Info(ctx, "No tunnel routes to sweep")
 		return nil
 	}
 
 	for _, tunnel := range tunnelRoutes {
-		tflog.Info(ctx, fmt.Sprintf("Deleting Cloudflare Tunnel Route network: %s", tunnel.Network))
-		//nolint:errcheck
-		client.DeleteTunnelRoute(context.Background(), cloudflare.AccountIdentifier(accountID), cloudflare.TunnelRoutesDeleteParams{Network: tunnel.Network, VirtualNetworkID: tunnel.TunnelID})
+		// Use standard filtering helper
+		if !utils.ShouldSweepResource(tunnel.Comment) {
+			continue
+		}
+
+		tflog.Info(ctx, fmt.Sprintf("Deleting tunnel route: %s (account: %s)", tunnel.Network, accountID))
+		err := client.DeleteTunnelRoute(ctx, cloudflare.AccountIdentifier(accountID), cloudflare.TunnelRoutesDeleteParams{
+			Network: tunnel.Network,
+		})
+		if err != nil {
+			tflog.Error(ctx, fmt.Sprintf("Failed to delete tunnel route %s: %s", tunnel.Network, err))
+			continue
+		}
+		tflog.Info(ctx, fmt.Sprintf("Deleted tunnel route: %s", tunnel.Network))
 	}
 
 	return nil
@@ -776,4 +788,39 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_route" "%[1]s_2" {
     network = "%[3]s"
     comment = "Conflicting route with same network"
 }`, ID, accountID, network)
+}
+
+func TestAccUpgradeZeroTrustTunnelCloudflaredRoute_FromPublishedV5(t *testing.T) {
+	rnd := utils.GenerateRandomResourceName()
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	subnet1 := fmt.Sprintf("10.%d.%d.10/32", utils.RandIntRange(10, 250), utils.RandIntRange(10, 250))
+
+	config := testAccCloudflareTunnelRouteSimple(rnd, rnd, accountID, subnet1)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			acctest.TestAccPreCheck(t)
+			acctest.TestAccPreCheck_AccountID(t)
+		},
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.16.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+		},
+	})
 }

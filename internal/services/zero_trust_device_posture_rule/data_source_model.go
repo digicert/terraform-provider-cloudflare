@@ -18,7 +18,7 @@ type ZeroTrustDevicePostureRuleResultDataSourceEnvelope struct {
 
 type ZeroTrustDevicePostureRuleDataSourceModel struct {
 	ID          types.String                                                                 `tfsdk:"id" path:"rule_id,computed"`
-	RuleID      types.String                                                                 `tfsdk:"rule_id" path:"rule_id,optional"`
+	RuleID      types.String                                                                 `tfsdk:"rule_id" path:"rule_id,required"`
 	AccountID   types.String                                                                 `tfsdk:"account_id" path:"account_id,required"`
 	Description types.String                                                                 `tfsdk:"description" json:"description,computed"`
 	Expiration  types.String                                                                 `tfsdk:"expiration" json:"expiration,computed"`
@@ -59,6 +59,7 @@ type ZeroTrustDevicePostureRuleInputDataSourceModel struct {
 	ExtendedKeyUsage        customfield.List[types.String]                                                    `tfsdk:"extended_key_usage" json:"extended_key_usage,computed"`
 	Locations               customfield.NestedObject[ZeroTrustDevicePostureRuleInputLocationsDataSourceModel] `tfsdk:"locations" json:"locations,computed"`
 	SubjectAlternativeNames customfield.List[types.String]                                                    `tfsdk:"subject_alternative_names" json:"subject_alternative_names,computed"`
+	UpdateWindowDays        types.Float64                                                                     `tfsdk:"update_window_days" json:"update_window_days,computed"`
 	ComplianceStatus        types.String                                                                      `tfsdk:"compliance_status" json:"compliance_status,computed"`
 	ConnectionID            types.String                                                                      `tfsdk:"connection_id" json:"connection_id,computed"`
 	LastSeen                types.String                                                                      `tfsdk:"last_seen" json:"last_seen,computed"`

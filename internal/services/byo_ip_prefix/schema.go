@@ -8,6 +8,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-timetypes/timetypes"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -17,6 +19,7 @@ var _ resource.ResourceWithConfigValidators = (*ByoIPPrefixResource)(nil)
 
 func ResourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
+		Version: 500,
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description:   "Identifier of an IP Prefix.",
@@ -40,8 +43,15 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 			},
 			"loa_document_id": schema.StringAttribute{
 				Description:   "Identifier for the uploaded LOA document.",
-				Required:      true,
+				Optional:      true,
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
+			},
+			"delegate_loa_creation": schema.BoolAttribute{
+				Description:   "Whether Cloudflare is allowed to generate the LOA document on behalf of the prefix owner.",
+				Computed:      true,
+				Optional:      true,
+				PlanModifiers: []planmodifier.Bool{boolplanmodifier.RequiresReplaceIfConfigured()},
+				Default:       booldefault.StaticBool(false),
 			},
 			"description": schema.StringAttribute{
 				Description: "Description of the prefix.",
@@ -66,6 +76,10 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 				Computed:   true,
 				CustomType: timetypes.RFC3339Type{},
 			},
+			"irr_validation_state": schema.StringAttribute{
+				Description: "State of one kind of validation for an IP prefix.",
+				Computed:    true,
+			},
 			"modified_at": schema.StringAttribute{
 				Computed:   true,
 				CustomType: timetypes.RFC3339Type{},
@@ -79,6 +93,18 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 				Description:        "Whether advertisement status of the prefix is locked, meaning it cannot be changed.",
 				Computed:           true,
 				DeprecationMessage: "Prefer the [BGP Prefixes API](https://developers.cloudflare.com/api/resources/addressing/subresources/prefixes/subresources/bgp_prefixes/) instead, which allows for advertising multiple BGP routes within a single IP Prefix.",
+			},
+			"ownership_validation_state": schema.StringAttribute{
+				Description: "State of one kind of validation for an IP prefix.",
+				Computed:    true,
+			},
+			"ownership_validation_token": schema.StringAttribute{
+				Description: "Token provided to demonstrate ownership of the prefix.",
+				Computed:    true,
+			},
+			"rpki_validation_state": schema.StringAttribute{
+				Description: "State of one kind of validation for an IP prefix.",
+				Computed:    true,
 			},
 		},
 	}

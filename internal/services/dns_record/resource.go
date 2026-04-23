@@ -13,6 +13,7 @@ import (
 	"github.com/cloudflare/cloudflare-go/v6/dns"
 	"github.com/cloudflare/cloudflare-go/v6/option"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/apijson"
+	"github.com/cloudflare/terraform-provider-cloudflare/internal/customfield"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/importpath"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/logging"
 	"github.com/hashicorp/terraform-plugin-framework-timetypes/timetypes"
@@ -103,6 +104,8 @@ func (r *DNSRecordResource) Create(ctx context.Context, req resource.CreateReque
 	}
 	data = &env.Result
 
+	normalizeSettings(ctx, data, &resp.Diagnostics)
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -152,6 +155,8 @@ func (r *DNSRecordResource) Update(ctx context.Context, req resource.UpdateReque
 	}
 	data = &env.Result
 
+	normalizeSettings(ctx, data, &resp.Diagnostics)
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -192,6 +197,11 @@ func (r *DNSRecordResource) Read(ctx context.Context, req resource.ReadRequest, 
 	}
 	data = &env.Result
 
+	// avoid unnecessary diff: the Cloudflare API omits the settings object entirely for
+	// non-proxied CNAME records. Unconditionally materialize settings as a known object
+	// with false defaults so state is stable against a config of settings = { flatten_cname = false }.
+	normalizeSettings(ctx, data, &resp.Diagnostics)
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -221,7 +231,7 @@ func (r *DNSRecordResource) Delete(ctx context.Context, req resource.DeleteReque
 }
 
 func (r *DNSRecordResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	var data *DNSRecordModel = new(DNSRecordModel)
+	var data = new(DNSRecordModel)
 
 	path_zone_id := ""
 	path_dns_record_id := ""
@@ -261,6 +271,9 @@ func (r *DNSRecordResource) ImportState(ctx context.Context, req resource.Import
 		return
 	}
 	data = &env.Result
+
+	// avoid unnecessary diff: same normalization as Read()
+	normalizeSettings(ctx, data, &resp.Diagnostics)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -381,7 +394,8 @@ func (r *DNSRecordResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 
 		// For Data field (CAA, LOC, etc records), check if it actually changed
 		if (plan.Data == nil) != (state.Data == nil) {
-			// One has data, the other doesn't - this is a change
+			hasChanges = true
+		} else if plan.Data != nil && state.Data != nil && !plan.Data.Equal(state.Data) {
 			hasChanges = true
 		}
 		// Note: If both have data, the contentChanged check above already covers it
@@ -390,7 +404,7 @@ func (r *DNSRecordResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 		// Check settings changes - treat empty object as equivalent to null
 		planSettingsEmpty := plan.Settings.IsNull() || plan.Settings.IsUnknown()
 		stateSettingsEmpty := state.Settings.IsNull() || state.Settings.IsUnknown()
-		
+
 		// Check if plan settings is an empty object {}
 		if !plan.Settings.IsNull() && !plan.Settings.IsUnknown() {
 			var planSettingsData DNSRecordSettingsModel
@@ -404,8 +418,8 @@ func (r *DNSRecordResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 				}
 			}
 		}
-		
-		// Only consider it a change if one is empty and the other is not, 
+
+		// Only consider it a change if one is empty and the other is not,
 		// or if both are non-empty and different
 		if !planSettingsEmpty && !stateSettingsEmpty {
 			hasChanges = hasChanges || !plan.Settings.Equal(state.Settings)
@@ -439,7 +453,7 @@ func (r *DNSRecordResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 		}
 
 		// Handle modified_on: preserve from state if no actual changes
-		// This prevents "inconsistent result after apply" errors when nothing changed
+		// This prevents showing as "known after apply" when nothing changed
 		if plan.ModifiedOn.IsUnknown() {
 			if !hasChanges {
 				// No actual changes, preserve modified_on from state
@@ -541,6 +555,37 @@ func (r *DNSRecordResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 			plan.TagsModifiedOn = state.TagsModifiedOn
 		}
 		// Otherwise let it be unknown (will be updated by the API)
+	}
+
+	// For CNAME records, resolve null/unknown settings sub-fields to false in the plan.
+	// These fields (ipv4_only, ipv6_only, flatten_cname) only apply to CNAME records.
+	// The API never returns them for other record types, so we only inject defaults here
+	// for CNAME to avoid spurious diffs on A/AAAA/MX/etc. records with settings = {}.
+	if !plan.Type.IsNull() && !plan.Type.IsUnknown() && plan.Type.ValueString() == "CNAME" {
+		if !plan.Settings.IsUnknown() {
+			var s DNSRecordSettingsModel
+			if !plan.Settings.IsNull() {
+				plan.Settings.As(ctx, &s, basetypes.ObjectAsOptions{})
+			}
+			changed := false
+			if s.IPV4Only.IsNull() || s.IPV4Only.IsUnknown() {
+				s.IPV4Only = types.BoolValue(false)
+				changed = true
+			}
+			if s.IPV6Only.IsNull() || s.IPV6Only.IsUnknown() {
+				s.IPV6Only = types.BoolValue(false)
+				changed = true
+			}
+			if s.FlattenCNAME.IsNull() || s.FlattenCNAME.IsUnknown() {
+				s.FlattenCNAME = types.BoolValue(false)
+				changed = true
+			}
+			if changed {
+				if normalized, diags := customfield.NewObject[DNSRecordSettingsModel](ctx, &s); !diags.HasError() {
+					plan.Settings = normalized
+				}
+			}
+		}
 	}
 
 	// Set the updated plan

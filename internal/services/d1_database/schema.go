@@ -18,6 +18,7 @@ var _ resource.ResourceWithConfigValidators = (*D1DatabaseResource)(nil)
 
 func ResourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
+		Version: 500,
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description:   "D1 database identifier (UUID).",
@@ -37,6 +38,14 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 			"name": schema.StringAttribute{
 				Description:   "D1 database name.",
 				Required:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
+			},
+			"jurisdiction": schema.StringAttribute{
+				Description: "Specify the location to restrict the D1 database to run and store data. If this option is present, the location hint is ignored.\nAvailable values: \"eu\", \"fedramp\".",
+				Optional:    true,
+				Validators: []validator.String{
+					stringvalidator.OneOfCaseInsensitive("eu", "fedramp"),
+				},
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"primary_location_hint": schema.StringAttribute{

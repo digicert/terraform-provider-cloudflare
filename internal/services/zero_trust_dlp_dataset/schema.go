@@ -22,6 +22,7 @@ var _ resource.ResourceWithConfigValidators = (*ZeroTrustDLPDatasetResource)(nil
 
 func ResourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
+		Version: 500,
 		Attributes: map[string]schema.Attribute{
 			"account_id": schema.StringAttribute{
 				Required:      true,
@@ -86,7 +87,7 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 				},
 			},
 			"updated_at": schema.StringAttribute{
-				Description: "When the dataset was last updated.\n\nThis includes name or description changes as well as uploads.",
+				Description: "Stores when the dataset was last updated.\n\nThis includes name or description changes as well as uploads.",
 				Computed:    true,
 				CustomType:  timetypes.RFC3339Type{},
 			},
@@ -197,7 +198,7 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 						},
 					},
 					"updated_at": schema.StringAttribute{
-						Description: "When the dataset was last updated.\n\nThis includes name or description changes as well as uploads.",
+						Description: "Stores when the dataset was last updated.\n\nThis includes name or description changes as well as uploads.",
 						Computed:    true,
 						CustomType:  timetypes.RFC3339Type{},
 					},

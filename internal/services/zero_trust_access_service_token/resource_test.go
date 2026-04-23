@@ -3,6 +3,7 @@ package zero_trust_access_service_token_test
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"testing"
@@ -24,6 +25,75 @@ var (
 	accountID = os.Getenv("CLOUDFLARE_ACCOUNT_ID")
 	zoneID    = os.Getenv("CLOUDFLARE_ZONE_ID")
 )
+
+func TestMain(m *testing.M) {
+	resource.TestMain(m)
+}
+
+func init() {
+	resource.AddTestSweepers("cloudflare_zero_trust_access_service_token", &resource.Sweeper{
+		Name: "cloudflare_zero_trust_access_service_token",
+		F:    testSweepCloudflareAccessServiceTokens,
+	})
+}
+
+func testSweepCloudflareAccessServiceTokens(r string) error {
+	ctx := context.Background()
+
+	client, clientErr := acctest.SharedV1Client()
+	if clientErr != nil {
+		tflog.Error(ctx, fmt.Sprintf("Failed to create Cloudflare client: %s", clientErr))
+	}
+
+	// Zone level Access Service Tokens.
+	zoneID := os.Getenv("CLOUDFLARE_ZONE_ID")
+	zoneTokens, _, err := client.ListAccessServiceTokens(context.Background(), cloudflare.ZoneIdentifier(zoneID), cloudflare.ListAccessServiceTokensParams{})
+	if err != nil {
+		tflog.Error(ctx, fmt.Sprintf("Failed to fetch zone level Access Service Tokens: %s", err))
+	}
+
+	if len(zoneTokens) == 0 {
+		log.Print("[DEBUG] No Cloudflare zone level Access Service Tokens to sweep")
+	} else {
+		for _, token := range zoneTokens {
+			if !utils.ShouldSweepResource(token.Name) {
+				continue
+			}
+			tflog.Info(ctx, fmt.Sprintf("Deleting zone-level Access Service Token: %s (%s)", token.Name, token.ID))
+			if _, err := client.DeleteAccessServiceToken(context.Background(), cloudflare.ZoneIdentifier(zoneID), token.ID); err != nil {
+				tflog.Error(ctx, fmt.Sprintf("Failed to delete zone-level Access Service Token %s (%s): %s", token.Name, token.ID, err))
+				continue
+			}
+			tflog.Info(ctx, fmt.Sprintf("Deleted zone-level Access Service Token: %s (%s)", token.Name, token.ID))
+		}
+	}
+
+	// Account level Access Service Tokens.
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	accountTokens, _, err := client.ListAccessServiceTokens(context.Background(), cloudflare.AccountIdentifier(accountID), cloudflare.ListAccessServiceTokensParams{})
+	if err != nil {
+		tflog.Error(ctx, fmt.Sprintf("Failed to fetch account level Access Service Tokens: %s", err))
+	}
+
+	if len(accountTokens) == 0 {
+		log.Print("[DEBUG] No Cloudflare account level Access Service Tokens to sweep")
+		return nil
+	}
+
+	for _, token := range accountTokens {
+		if !utils.ShouldSweepResource(token.Name) {
+			continue
+		}
+		tflog.Info(ctx, fmt.Sprintf("Deleting account-level Access Service Token: %s (%s)", token.Name, token.ID))
+		if _, err := client.DeleteAccessServiceToken(context.Background(), cloudflare.AccountIdentifier(accountID), token.ID); err != nil {
+			tflog.Error(ctx, fmt.Sprintf("Failed to delete account-level Access Service Token %s (%s): %s", token.Name, token.ID, err))
+			continue
+		}
+		tflog.Info(ctx, fmt.Sprintf("Deleted account-level Access Service Token: %s (%s)", token.Name, token.ID))
+	}
+
+	return nil
+}
 
 func TestAccCloudflareAccessServiceToken_BasicAccount(t *testing.T) {
 	// Temporarily unset CLOUDFLARE_API_TOKEN if it is set as the Access
@@ -859,4 +929,36 @@ func testAccCloudflareAccessServiceTokenImportStateIdFunc(resourceName string, c
 
 		return fmt.Sprintf("%s/%s/%s", containerType, containerID, rs.Primary.ID), nil
 	}
+}
+
+func TestAccUpgradeZeroTrustAccessServiceToken_FromPublishedV5(t *testing.T) {
+	rnd := utils.GenerateRandomResourceName()
+	name := fmt.Sprintf("cloudflare_zero_trust_access_service_token.%s", rnd)
+	resourceName := strings.Split(name, ".")[1]
+
+	config := testCloudflareAccessServiceTokenBasicConfig(resourceName, resourceName, cloudflare.AccountIdentifier(accountID))
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() { acctest.TestAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.16.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+		},
+	})
 }

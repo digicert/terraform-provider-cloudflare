@@ -19,8 +19,12 @@ var _ datasource.DataSourceWithConfigValidators = (*ZoneSubscriptionDataSource)(
 func DataSourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
 		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Description: "Identifier",
+				Computed:    true,
+			},
 			"zone_id": schema.StringAttribute{
-				Description: "Subscription identifier tag.",
+				Description: "Identifier",
 				Required:    true,
 			},
 			"currency": schema.StringAttribute{
@@ -38,7 +42,7 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 				CustomType:  timetypes.RFC3339Type{},
 			},
 			"frequency": schema.StringAttribute{
-				Description: "How often the subscription is renewed automatically.\nAvailable values: \"weekly\", \"monthly\", \"quarterly\", \"yearly\".",
+				Description: "How often the subscription is renewed automatically.\nAvailable values: \"weekly\", \"monthly\", \"quarterly\", \"yearly\", \"not-applicable\".",
 				Computed:    true,
 				Validators: []validator.String{
 					stringvalidator.OneOfCaseInsensitive(
@@ -46,12 +50,9 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 						"monthly",
 						"quarterly",
 						"yearly",
+						"not-applicable",
 					),
 				},
-			},
-			"id": schema.StringAttribute{
-				Description: "Subscription identifier tag.",
-				Computed:    true,
 			},
 			"price": schema.Float64Attribute{
 				Description: "The price of the subscription that will be billed, in US dollars.",
@@ -78,7 +79,7 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 				CustomType:  customfield.NewNestedObjectType[ZoneSubscriptionRatePlanDataSourceModel](ctx),
 				Attributes: map[string]schema.Attribute{
 					"id": schema.StringAttribute{
-						Description: "The ID of the rate plan.\nAvailable values: \"free\", \"lite\", \"pro\", \"pro_plus\", \"business\", \"enterprise\", \"partners_free\", \"partners_pro\", \"partners_business\", \"partners_enterprise\".",
+						Description: "The ID of the rate plan.\nAvailable values: \"free\", \"lite\", \"pro\", \"pro_plus\", \"business\", \"enterprise\", \"partners_free\", \"partners_pro\", \"partners_business\", \"partners_enterprise\", \"partners_ent\".",
 						Computed:    true,
 						Validators: []validator.String{
 							stringvalidator.OneOfCaseInsensitive(
@@ -92,6 +93,7 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 								"partners_pro",
 								"partners_business",
 								"partners_enterprise",
+								"partners_ent",
 							),
 						},
 					},
@@ -116,7 +118,7 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 						Computed:    true,
 					},
 					"sets": schema.ListAttribute{
-						Description: "The list of sets this rate plan applies to.",
+						Description: "The list of sets this rate plan applies to. Returns array of strings.",
 						Computed:    true,
 						CustomType:  customfield.NewListType[types.String](ctx),
 						ElementType: types.StringType,

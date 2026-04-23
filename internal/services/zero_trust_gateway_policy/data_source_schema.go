@@ -27,7 +27,7 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 			},
 			"rule_id": schema.StringAttribute{
 				Description: "Identify the API resource with a UUID.",
-				Optional:    true,
+				Required:    true,
 			},
 			"account_id": schema.StringAttribute{
 				Required: true,
@@ -385,6 +385,17 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 							},
 							"ipv6": schema.StringAttribute{
 								Description: "Specify the IPv6 range to use for egress.",
+								Computed:    true,
+							},
+						},
+					},
+					"forensic_copy": schema.SingleNestedAttribute{
+						Description: "Configure whether a copy of the HTTP request will be sent to storage when the rule matches.",
+						Computed:    true,
+						CustomType:  customfield.NewNestedObjectType[ZeroTrustGatewayPolicyRuleSettingsForensicCopyDataSourceModel](ctx),
+						Attributes: map[string]schema.Attribute{
+							"enabled": schema.BoolAttribute{
+								Description: "Enable sending the copy to storage.",
 								Computed:    true,
 							},
 						},

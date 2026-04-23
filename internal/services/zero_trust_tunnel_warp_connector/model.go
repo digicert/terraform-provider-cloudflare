@@ -17,15 +17,14 @@ type ZeroTrustTunnelWARPConnectorResultEnvelope struct {
 type ZeroTrustTunnelWARPConnectorModel struct {
 	ID              types.String                                                               `tfsdk:"id" json:"id,computed"`
 	AccountID       types.String                                                               `tfsdk:"account_id" path:"account_id,required"`
+	Ha              types.Bool                                                                 `tfsdk:"ha" json:"ha,computed_optional,no_refresh"`
 	Name            types.String                                                               `tfsdk:"name" json:"name,required"`
 	TunnelSecret    types.String                                                               `tfsdk:"tunnel_secret" json:"tunnel_secret,optional,no_refresh"`
 	AccountTag      types.String                                                               `tfsdk:"account_tag" json:"account_tag,computed"`
-	ConfigSrc       types.String                                                               `tfsdk:"config_src" json:"config_src,computed"`
 	ConnsActiveAt   timetypes.RFC3339                                                          `tfsdk:"conns_active_at" json:"conns_active_at,computed" format:"date-time"`
 	ConnsInactiveAt timetypes.RFC3339                                                          `tfsdk:"conns_inactive_at" json:"conns_inactive_at,computed" format:"date-time"`
 	CreatedAt       timetypes.RFC3339                                                          `tfsdk:"created_at" json:"created_at,computed" format:"date-time"`
 	DeletedAt       timetypes.RFC3339                                                          `tfsdk:"deleted_at" json:"deleted_at,computed" format:"date-time"`
-	RemoteConfig    types.Bool                                                                 `tfsdk:"remote_config" json:"remote_config,computed"`
 	Status          types.String                                                               `tfsdk:"status" json:"status,computed"`
 	TunType         types.String                                                               `tfsdk:"tun_type" json:"tun_type,computed"`
 	Connections     customfield.NestedObjectList[ZeroTrustTunnelWARPConnectorConnectionsModel] `tfsdk:"connections" json:"connections,computed"`

@@ -13,6 +13,7 @@ import (
 )
 
 type EmailRoutingDNSDataSourceModel struct {
+	ID         types.String                                                         `tfsdk:"id" path:"zone_id,computed"`
 	ZoneID     types.String                                                         `tfsdk:"zone_id" path:"zone_id,required"`
 	Subdomain  types.String                                                         `tfsdk:"subdomain" query:"subdomain,optional"`
 	Success    types.Bool                                                           `tfsdk:"success" json:"success,computed"`
@@ -88,8 +89,9 @@ type EmailRoutingDNSResultRecordDataSourceModel struct {
 }
 
 type EmailRoutingDNSResultInfoDataSourceModel struct {
-	Count      types.Float64 `tfsdk:"count" json:"count,computed"`
-	Page       types.Float64 `tfsdk:"page" json:"page,computed"`
-	PerPage    types.Float64 `tfsdk:"per_page" json:"per_page,computed"`
-	TotalCount types.Float64 `tfsdk:"total_count" json:"total_count,computed"`
+	EmailRoutingDNSCount types.Float64 `tfsdk:"email_routing_dns_count" json:"count,computed"`
+	Page                 types.Float64 `tfsdk:"page" json:"page,computed"`
+	PerPage              types.Float64 `tfsdk:"per_page" json:"per_page,computed"`
+	TotalCount           types.Float64 `tfsdk:"total_count" json:"total_count,computed"`
+	TotalPages           types.Float64 `tfsdk:"total_pages" json:"total_pages,computed"`
 }

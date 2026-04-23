@@ -31,6 +31,10 @@ func ListDataSourceSchema(ctx context.Context) schema.Schema {
 					stringvalidator.OneOfCaseInsensitive("asc", "desc"),
 				},
 			},
+			"filter": schema.StringAttribute{
+				Description: "Filter widgets by field using case-insensitive substring matching.\nFormat: `field:value`\n\nSupported fields:\n- `name` - Filter by widget name (e.g., `filter=name:login-form`)\n- `sitekey` - Filter by sitekey (e.g., `filter=sitekey:0x4AAA`)\n\nReturns 400 Bad Request if the field is unsupported or format is invalid.\nAn empty filter value returns all results.",
+				Optional:    true,
+			},
 			"order": schema.StringAttribute{
 				Description: "Field to order widgets by.\nAvailable values: \"id\", \"sitekey\", \"name\", \"created_on\", \"modified_on\".",
 				Optional:    true,
@@ -57,6 +61,10 @@ func ListDataSourceSchema(ctx context.Context) schema.Schema {
 				CustomType:  customfield.NewNestedObjectListType[TurnstileWidgetsResultDataSourceModel](ctx),
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
+						"id": schema.StringAttribute{
+							Description: "Widget item identifier tag.",
+							Computed:    true,
+						},
 						"bot_fight_mode": schema.BoolAttribute{
 							Description: "If bot_fight_mode is set to `true`, Cloudflare issues computationally\nexpensive challenges in response to malicious bots (ENT only).",
 							Computed:    true,

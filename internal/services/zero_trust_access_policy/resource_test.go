@@ -3,20 +3,92 @@ package zero_trust_access_policy_test
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"testing"
 
-	cloudflare "github.com/cloudflare/cloudflare-go/v6"
-	"github.com/cloudflare/cloudflare-go/v6/zero_trust"
+	"github.com/cloudflare/cloudflare-go"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/acctest"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/consts"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/utils"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
+	"github.com/pkg/errors"
 )
+
+func TestMain(m *testing.M) {
+	resource.TestMain(m)
+}
+
+func init() {
+	resource.AddTestSweepers("cloudflare_zero_trust_access_policy", &resource.Sweeper{
+		Name: "cloudflare_zero_trust_access_policy",
+		F:    testSweepCloudflareAccessPolicies,
+	})
+}
+
+func testSweepCloudflareAccessPolicies(r string) error {
+	ctx := context.Background()
+
+	client, clientErr := acctest.SharedV1Client() // TODO(terraform): replace with SharedV2Client
+	if clientErr != nil {
+		tflog.Error(ctx, fmt.Sprintf("Failed to create Cloudflare client: %s", clientErr))
+	}
+
+	// Zone level Access Policies.
+	zoneID := os.Getenv("CLOUDFLARE_ZONE_ID")
+	zonePolicies, _, err := client.ListAccessPolicies(context.Background(), cloudflare.ZoneIdentifier(zoneID), cloudflare.ListAccessPoliciesParams{})
+	if err != nil {
+		tflog.Error(ctx, fmt.Sprintf("Failed to fetch zone level Access Policies: %s", err))
+	}
+
+	if len(zonePolicies) == 0 {
+		log.Print("[DEBUG] No Cloudflare zone level Access Policies to sweep")
+	} else {
+		for _, policy := range zonePolicies {
+			if !utils.ShouldSweepResource(policy.Name) {
+				continue
+			}
+			tflog.Info(ctx, fmt.Sprintf("Deleting zone-level Access Policy: %s (%s)", policy.Name, policy.ID))
+			if err := client.DeleteAccessPolicy(context.Background(), cloudflare.ZoneIdentifier(zoneID), cloudflare.DeleteAccessPolicyParams{PolicyID: policy.ID}); err != nil {
+				tflog.Error(ctx, fmt.Sprintf("Failed to delete zone-level Access Policy %s (%s): %s", policy.Name, policy.ID, err))
+				continue
+			}
+			tflog.Info(ctx, fmt.Sprintf("Deleted zone-level Access Policy: %s (%s)", policy.Name, policy.ID))
+		}
+	}
+
+	// Account level Access Policies.
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	accountPolicies, _, err := client.ListAccessPolicies(context.Background(), cloudflare.AccountIdentifier(accountID), cloudflare.ListAccessPoliciesParams{})
+	if err != nil {
+		tflog.Error(ctx, fmt.Sprintf("Failed to fetch account level Access Policies: %s", err))
+	}
+
+	if len(accountPolicies) == 0 {
+		log.Print("[DEBUG] No Cloudflare account level Access Policies to sweep")
+		return nil
+	}
+
+	for _, policy := range accountPolicies {
+		if !utils.ShouldSweepResource(policy.Name) {
+			continue
+		}
+		tflog.Info(ctx, fmt.Sprintf("Deleting account-level Access Policy: %s (%s)", policy.Name, policy.ID))
+		if err := client.DeleteAccessPolicy(context.Background(), cloudflare.AccountIdentifier(accountID), cloudflare.DeleteAccessPolicyParams{PolicyID: policy.ID}); err != nil {
+			tflog.Error(ctx, fmt.Sprintf("Failed to delete account-level Access Policy %s (%s): %s", policy.Name, policy.ID, err))
+			continue
+		}
+		tflog.Info(ctx, fmt.Sprintf("Deleted account-level Access Policy: %s (%s)", policy.Name, policy.ID))
+	}
+
+	return nil
+}
 
 func TestAccCloudflareAccessPolicy_ServiceToken(t *testing.T) {
 	// Temporarily unset CLOUDFLARE_API_TOKEN if it is set as the Access
@@ -841,7 +913,11 @@ func testAccessPolicyReusableConfig(resourceID, accountID string) string {
 }
 
 func testAccCheckCloudflareZeroTrustAccessPolicyDestroy(s *terraform.State) error {
-	client := acctest.SharedClient()
+	client, clientErr := acctest.SharedV1Client()
+	if clientErr != nil {
+		tflog.Error(context.TODO(), fmt.Sprintf("failed to create Cloudflare client for destroy check: %s", clientErr))
+		return clientErr
+	}
 
 	for _, rs := range s.RootModule().Resources {
 		if rs.Type != "cloudflare_zero_trust_access_policy" {
@@ -849,14 +925,10 @@ func testAccCheckCloudflareZeroTrustAccessPolicyDestroy(s *terraform.State) erro
 		}
 
 		accountID := rs.Primary.Attributes[consts.AccountIDSchemaKey]
-		_, err := client.ZeroTrust.Access.Policies.Get(
-			context.Background(),
-			rs.Primary.ID,
-			zero_trust.AccessPolicyGetParams{
-				AccountID: cloudflare.F(accountID),
-			},
-		)
-		if err == nil {
+
+		var notFoundError *cloudflare.NotFoundError
+		_, err := client.GetAccessPolicy(context.Background(), cloudflare.AccountIdentifier(accountID), cloudflare.GetAccessPolicyParams{PolicyID: rs.Primary.ID})
+		if !errors.As(err, &notFoundError) {
 			return fmt.Errorf("zero trust access policy still exists")
 		}
 	}
@@ -967,4 +1039,39 @@ func TestAccCloudflareAccessPolicy_OptionalBooleans(t *testing.T) {
 
 func testAccessPolicyOptionalBooleansConfig(resourceID, zone, accountID string) string {
 	return acctest.LoadTestCase("accesspolicyoptionalboolsconfig.tf", resourceID, zone, accountID)
+}
+
+func TestAccUpgradeZeroTrustAccessPolicy_FromPublishedV5(t *testing.T) {
+	rnd := utils.GenerateRandomResourceName()
+	zone := os.Getenv("CLOUDFLARE_DOMAIN")
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+
+	config := testAccessPolicyServiceTokenConfig(rnd, zone, accountID)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			acctest.TestAccPreCheck(t)
+			acctest.TestAccPreCheck_AccountID(t)
+		},
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.16.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+		},
+	})
 }

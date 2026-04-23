@@ -18,7 +18,7 @@ var (
 	saasAppTypes                          = []string{"saas", "dash_sso"}
 	appLauncherVisibleAppTypes            = []string{"self_hosted", "ssh", "vnc", "rdp", "saas", "bookmark"}
 	targetCompatibleAppTypes              = []string{"rdp", "infrastructure"}
-	sessionDurationCompatibleAppTypes     = []string{"saas", "dash_sso", "self_hosted", "ssh", "vnc", "rdp", "app_launcher", "warp", "mcp_portal", "mcp"}
+	sessionDurationCompatibleAppTypes     = []string{"saas", "dash_sso", "self_hosted", "ssh", "vnc", "rdp", "app_launcher", "warp", "mcp_portal", "mcp", "proxy_endpoint"}
 	authenticateViaWarpCompatibleAppTypes = []string{"self_hosted", "ssh", "vnc", "rdp", "saas", "dash_sso"}
 	durationRegex                         = regexp.MustCompile(`^(?:0|[-+]?(\d+(?:\.\d*)?|\.\d+)(?:ns|us|µs|ms|s|m|h)(?:(\d+(?:\.\d*)?|\.\d+)(?:ns|us|µs|ms|s|m|h))*)$`)
 )
@@ -45,7 +45,7 @@ func setDefaultAccordingToAppType[T attr.Value](wantAppType string, gotAppType s
 func modifyPlanForDomains(ctx context.Context, planApp, stateApp *ZeroTrustAccessApplicationModel) {
 	appType := planApp.Type.ValueString()
 
-	setDefaultAccordingToAppTypes(selfHostedAppTypes, appType, &planApp.SelfHostedDomains, customfield.UnknownList[types.String](ctx), customfield.NullList[types.String](ctx))
+	setDefaultAccordingToAppTypes(selfHostedAppTypes, appType, &planApp.SelfHostedDomains, customfield.UnknownSet[types.String](ctx), customfield.NullSet[types.String](ctx))
 	setDefaultAccordingToAppTypes(selfHostedAppTypes, appType, &planApp.Destinations, customfield.UnknownObjectList[ZeroTrustAccessApplicationDestinationsModel](ctx), customfield.NullObjectList[ZeroTrustAccessApplicationDestinationsModel](ctx))
 
 	// A self_hosted_app's 'domain', 'self_hosted_domains', and 'destinations' are all tied together in the API.
@@ -60,7 +60,7 @@ func modifyPlanForDomains(ctx context.Context, planApp, stateApp *ZeroTrustAcces
 			planApp.Domain = types.StringUnknown()
 		}
 		if planApp.SelfHostedDomains.IsNull() {
-			planApp.SelfHostedDomains = customfield.UnknownList[types.String](ctx)
+			planApp.SelfHostedDomains = customfield.UnknownSet[types.String](ctx)
 		}
 		if planApp.Destinations.IsNull() {
 			planApp.Destinations = customfield.UnknownObjectList[ZeroTrustAccessApplicationDestinationsModel](ctx)

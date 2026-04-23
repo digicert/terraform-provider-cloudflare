@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"regexp"
 	"strings"
@@ -16,6 +15,7 @@ import (
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/utils"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 )
 
 func TestMain(m *testing.M) {
@@ -35,25 +35,31 @@ func testSweepCloudflareAccessIdentityProviders(r string) error {
 	client, clientErr := acctest.SharedV1Client() // TODO(terraform): replace with SharedV2Clent
 	if clientErr != nil {
 		tflog.Error(ctx, fmt.Sprintf("Failed to create Cloudflare client: %s", clientErr))
+		return clientErr
 	}
 
-	accessIDPs, _, accessIDPsErr := client.ListAccessIdentityProviders(context.Background(), cloudflare.AccountIdentifier(accountID), cloudflare.ListAccessIdentityProvidersParams{})
+	accessIDPs, _, accessIDPsErr := client.ListAccessIdentityProviders(ctx, cloudflare.AccountIdentifier(accountID), cloudflare.ListAccessIdentityProvidersParams{})
 	if accessIDPsErr != nil {
 		tflog.Error(ctx, fmt.Sprintf("Failed to fetch Access Identity Providers: %s", accessIDPsErr))
+		return accessIDPsErr
 	}
 
 	if len(accessIDPs) == 0 {
-		log.Print("[DEBUG] No Access Identity Providers to sweep")
+		tflog.Info(ctx, "No Access Identity Providers to sweep")
 		return nil
 	}
 
 	for _, idp := range accessIDPs {
-		tflog.Info(ctx, fmt.Sprintf("Deleting Access Identity Provider ID: %s", idp.ID))
-		_, err := client.DeleteAccessIdentityProvider(context.Background(), cloudflare.AccountIdentifier(accountID), idp.ID)
-
-		if err != nil {
-			tflog.Error(ctx, fmt.Sprintf("Failed to delete Access Identity Provider (%s): %s", idp.ID, err))
+		if !utils.ShouldSweepResource(idp.Name) {
+			continue
 		}
+		tflog.Info(ctx, fmt.Sprintf("Deleting Access Identity Provider: %s (%s) (account: %s)", idp.Name, idp.ID, accountID))
+		_, err := client.DeleteAccessIdentityProvider(ctx, cloudflare.AccountIdentifier(accountID), idp.ID)
+		if err != nil {
+			tflog.Error(ctx, fmt.Sprintf("Failed to delete Access Identity Provider %s (%s): %s", idp.Name, idp.ID, err))
+			continue
+		}
+		tflog.Info(ctx, fmt.Sprintf("Deleted Access Identity Provider: %s", idp.ID))
 	}
 
 	return nil
@@ -474,4 +480,39 @@ func testAccCheckCloudflareAccessIdentityProviderAzureADUpdated(accountID, name 
 
 func testAccCheckCloudflareAccessIdentityProviderAzureADNoSCIM(accountID, name string) string {
 	return acctest.LoadTestCase("accessidentityproviderazureadnoscim.tf", accountID, name)
+}
+
+func TestAccUpgradeZeroTrustAccessIdentityProvider_FromPublishedV5(t *testing.T) {
+	t.Skip("Failed to marshal state to json: schema version 0 in state does not match version 1 from the provider")
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	rnd := utils.GenerateRandomResourceName()
+
+	config := testAccCheckCloudflareAccessIdentityProviderOneTimePin(rnd, cloudflare.AccountIdentifier(accountID))
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			acctest.TestAccPreCheck(t)
+			acctest.TestAccPreCheck_AccountID(t)
+		},
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.16.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+		},
+	})
 }

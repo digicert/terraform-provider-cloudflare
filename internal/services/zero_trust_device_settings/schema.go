@@ -15,6 +15,7 @@ var _ resource.ResourceWithConfigValidators = (*ZeroTrustDeviceSettingsResource)
 
 func ResourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
+		Version: 500,
 		Attributes: map[string]schema.Attribute{
 			"account_id": schema.StringAttribute{
 				Required:      true,
@@ -22,6 +23,22 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 			},
 			"disable_for_time": schema.Float64Attribute{
 				Description: "Sets the time limit, in seconds, that a user can use an override code to bypass WARP.",
+				Optional:    true,
+			},
+			"external_emergency_signal_enabled": schema.BoolAttribute{
+				Description: "Controls whether the external emergency disconnect feature is enabled.",
+				Optional:    true,
+			},
+			"external_emergency_signal_fingerprint": schema.StringAttribute{
+				Description: "The SHA256 fingerprint (64 hexadecimal characters) of the HTTPS server certificate for the external_emergency_signal_url. If provided, the WARP client will use this value to verify the server's identity. The device will ignore any response if the server's certificate fingerprint does not exactly match this value.",
+				Optional:    true,
+			},
+			"external_emergency_signal_interval": schema.StringAttribute{
+				Description: `The interval at which the WARP client fetches the emergency disconnect signal, formatted as a duration string (e.g., "5m", "2m30s", "1h"). Minimum 30 seconds.`,
+				Optional:    true,
+			},
+			"external_emergency_signal_url": schema.StringAttribute{
+				Description: "The HTTPS URL from which to fetch the emergency disconnect signal. Must use HTTPS and have an IPv4 or IPv6 address as the host.",
 				Optional:    true,
 			},
 			"gateway_proxy_enabled": schema.BoolAttribute{

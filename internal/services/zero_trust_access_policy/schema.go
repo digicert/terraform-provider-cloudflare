@@ -9,6 +9,7 @@ import (
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/customvalidator"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/float64validator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -23,6 +24,7 @@ var _ resource.ResourceWithConfigValidators = (*ZeroTrustAccessPolicyResource)(n
 
 func ResourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
+		Version: 500,
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description:   "The UUID of the policy",
@@ -87,6 +89,66 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 							Description: "The UUID of an re-usable email list.",
 							Optional:    true,
 						},
+					},
+				},
+			},
+			"connection_rules": schema.SingleNestedAttribute{
+				Description: "The rules that define how users may connect to targets secured by your application.",
+				Optional:    true,
+				Attributes: map[string]schema.Attribute{
+					"rdp": schema.SingleNestedAttribute{
+						Description: "The RDP-specific rules that define clipboard behavior for RDP connections.",
+						Optional:    true,
+						Attributes: map[string]schema.Attribute{
+							"allowed_clipboard_local_to_remote_formats": schema.ListAttribute{
+								Description: "Clipboard formats allowed when copying from local machine to remote RDP session.",
+								Optional:    true,
+								Validators: []validator.List{
+									listvalidator.ValueStringsAre(
+										stringvalidator.OneOfCaseInsensitive("text"),
+									),
+								},
+								ElementType: types.StringType,
+							},
+							"allowed_clipboard_remote_to_local_formats": schema.ListAttribute{
+								Description: "Clipboard formats allowed when copying from remote RDP session to local machine.",
+								Optional:    true,
+								Validators: []validator.List{
+									listvalidator.ValueStringsAre(
+										stringvalidator.OneOfCaseInsensitive("text"),
+									),
+								},
+								ElementType: types.StringType,
+							},
+						},
+					},
+				},
+			},
+			"mfa_config": schema.SingleNestedAttribute{
+				Description: "Configures multi-factor authentication (MFA) settings.",
+				Optional:    true,
+				Attributes: map[string]schema.Attribute{
+					"allowed_authenticators": schema.ListAttribute{
+						Description: "Lists the MFA methods that users can authenticate with.",
+						Optional:    true,
+						Validators: []validator.List{
+							listvalidator.ValueStringsAre(
+								stringvalidator.OneOfCaseInsensitive(
+									"totp",
+									"biometrics",
+									"security_key",
+								),
+							),
+						},
+						ElementType: types.StringType,
+					},
+					"mfa_disabled": schema.BoolAttribute{
+						Description: "Indicates whether to disable MFA for this resource. This option is available at the application and policy level.",
+						Optional:    true,
+					},
+					"session_duration": schema.StringAttribute{
+						Description: "Defines the duration of an MFA session. Must be in minutes (m) or hours (h). Minimum: 0m. Maximum: 720h (30 days). Examples:`5m` or `24h`.",
+						Optional:    true,
 					},
 				},
 			},
@@ -356,6 +418,26 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 								},
 							},
 						},
+						"user_risk_score": schema.SingleNestedAttribute{
+							Optional: true,
+							Attributes: map[string]schema.Attribute{
+								"user_risk_score": schema.ListAttribute{
+									Description: "A list of risk score levels to match. Values can be low, medium, high, or unscored.",
+									Required:    true,
+									Validators: []validator.List{
+										listvalidator.ValueStringsAre(
+											stringvalidator.OneOfCaseInsensitive(
+												"low",
+												"medium",
+												"high",
+												"unscored",
+											),
+										),
+									},
+									ElementType: types.StringType,
+								},
+							},
+						},
 					},
 				},
 			},
@@ -620,6 +702,26 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 								},
 							},
 						},
+						"user_risk_score": schema.SingleNestedAttribute{
+							Optional: true,
+							Attributes: map[string]schema.Attribute{
+								"user_risk_score": schema.ListAttribute{
+									Description: "A list of risk score levels to match. Values can be low, medium, high, or unscored.",
+									Required:    true,
+									Validators: []validator.List{
+										listvalidator.ValueStringsAre(
+											stringvalidator.OneOfCaseInsensitive(
+												"low",
+												"medium",
+												"high",
+												"unscored",
+											),
+										),
+									},
+									ElementType: types.StringType,
+								},
+							},
+						},
 					},
 				},
 			},
@@ -880,6 +982,26 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 								"app_uid": schema.StringAttribute{
 									Description: "The ID of an Access OIDC SaaS application",
 									Required:    true,
+								},
+							},
+						},
+						"user_risk_score": schema.SingleNestedAttribute{
+							Optional: true,
+							Attributes: map[string]schema.Attribute{
+								"user_risk_score": schema.ListAttribute{
+									Description: "A list of risk score levels to match. Values can be low, medium, high, or unscored.",
+									Required:    true,
+									Validators: []validator.List{
+										listvalidator.ValueStringsAre(
+											stringvalidator.OneOfCaseInsensitive(
+												"low",
+												"medium",
+												"high",
+												"unscored",
+											),
+										),
+									},
+									ElementType: types.StringType,
 								},
 							},
 						},

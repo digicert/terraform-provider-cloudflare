@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/cloudflare/cloudflare-go/v6"
@@ -11,7 +12,9 @@ import (
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/acctest"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/consts"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/utils"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
@@ -35,7 +38,7 @@ func testSweepCloudflareWorkersRoute(r string) error {
 	zoneID := os.Getenv("CLOUDFLARE_ZONE_ID")
 
 	if zoneID == "" {
-		// Skip sweeping if no zone ID is set
+		tflog.Info(ctx, "Skipping workers routes sweep: CLOUDFLARE_ZONE_ID not set")
 		return nil
 	}
 
@@ -44,26 +47,41 @@ func testSweepCloudflareWorkersRoute(r string) error {
 		ZoneID: cloudflare.F(zoneID),
 	})
 	if err != nil {
+		tflog.Error(ctx, fmt.Sprintf("Failed to list workers routes: %s", err))
 		return fmt.Errorf("failed to list workers routes: %w", err)
 	}
 
-	// Delete all routes in the test zone
-	// Note: In a test environment, we assume all routes can be deleted
+	hasRoutes := false
+	// Delete test routes based on pattern matching
 	for page != nil {
 		for _, route := range page.Result {
+			// Only delete routes with patterns matching test patterns
+			// Test routes use patterns like: cftftest*.cfapi.net/*
+			if !strings.Contains(route.Pattern, "cftftest") && !strings.Contains(route.Pattern, ".cfapi.net") {
+				tflog.Debug(ctx, fmt.Sprintf("Skipping non-test route: %s", route.Pattern))
+				continue
+			}
+
+			hasRoutes = true
+			tflog.Info(ctx, fmt.Sprintf("Deleting worker route: %s (zone: %s)", route.Pattern, zoneID))
 			_, err := client.Workers.Routes.Delete(ctx, route.ID, workers.RouteDeleteParams{
 				ZoneID: cloudflare.F(zoneID),
 			})
 			if err != nil {
-				// Log but continue sweeping other routes
+				tflog.Error(ctx, fmt.Sprintf("Failed to delete worker route %s: %s", route.ID, err))
 				continue
 			}
+			tflog.Info(ctx, fmt.Sprintf("Deleted worker route: %s", route.ID))
 		}
 
 		page, err = page.GetNextPage()
 		if err != nil {
 			break
 		}
+	}
+
+	if !hasRoutes {
+		tflog.Info(ctx, "No workers routes to sweep")
 	}
 
 	return nil
@@ -173,4 +191,37 @@ func TestAccCloudflareWorkersRoute_NoScript(t *testing.T) {
 
 func testAccCloudflareWorkersRouteConfigNoScript(rnd, zoneID, domain string) string {
 	return acctest.LoadTestCase("no_script.tf", rnd, zoneID, domain)
+}
+
+func TestAccUpgradeWorkersRoute_FromPublishedV5(t *testing.T) {
+	rnd := utils.GenerateRandomResourceName()
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	zoneID := os.Getenv("CLOUDFLARE_ZONE_ID")
+	domain := os.Getenv("CLOUDFLARE_DOMAIN")
+
+	config := testAccCloudflareWorkersRouteConfig(rnd, accountID, zoneID, domain)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() { acctest.TestAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.16.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+		},
+	})
 }

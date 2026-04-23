@@ -12,6 +12,7 @@ import (
 	"github.com/cloudflare/cloudflare-go/v6/option"
 	"github.com/cloudflare/cloudflare-go/v6/zones"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/apijson"
+	"github.com/cloudflare/terraform-provider-cloudflare/internal/customfield"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/importpath"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/logging"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -155,7 +156,20 @@ func (r *ZoneSubscriptionResource) Read(ctx context.Context, req resource.ReadRe
 	}
 
 	res := new(http.Response)
-	env := ZoneSubscriptionResultEnvelope{*data}
+	ratePlanModel := &ZoneSubscriptionRatePlanModel{
+		Sets: customfield.NullList[types.String](ctx),
+	}
+	ratePlanObj, diags := customfield.NewObject(ctx, ratePlanModel)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	env := ZoneSubscriptionResultEnvelope{
+		Result: ZoneSubscriptionModel{
+			ZoneID:   data.ZoneID,
+			RatePlan: ratePlanObj,
+		},
+	}
 	_, err := r.client.Zones.Subscriptions.Get(
 		ctx,
 		zones.SubscriptionGetParams{
@@ -190,7 +204,7 @@ func (r *ZoneSubscriptionResource) Delete(ctx context.Context, req resource.Dele
 }
 
 func (r *ZoneSubscriptionResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	var data *ZoneSubscriptionModel = new(ZoneSubscriptionModel)
+	var data = new(ZoneSubscriptionModel)
 
 	path := ""
 	diags := importpath.ParseImportID(
@@ -206,7 +220,20 @@ func (r *ZoneSubscriptionResource) ImportState(ctx context.Context, req resource
 	data.ZoneID = types.StringValue(path)
 
 	res := new(http.Response)
-	env := ZoneSubscriptionResultEnvelope{*data}
+	ratePlanModel := &ZoneSubscriptionRatePlanModel{
+		Sets: customfield.NullList[types.String](ctx),
+	}
+	ratePlanObj, diags := customfield.NewObject(ctx, ratePlanModel)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	env := ZoneSubscriptionResultEnvelope{
+		Result: ZoneSubscriptionModel{
+			ZoneID:   data.ZoneID,
+			RatePlan: ratePlanObj,
+		},
+	}
 	_, err := r.client.Zones.Subscriptions.Get(
 		ctx,
 		zones.SubscriptionGetParams{

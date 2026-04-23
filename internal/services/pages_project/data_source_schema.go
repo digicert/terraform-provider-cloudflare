@@ -19,12 +19,16 @@ var _ datasource.DataSourceWithConfigValidators = (*PagesProjectDataSource)(nil)
 func DataSourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
 		Attributes: map[string]schema.Attribute{
-			"account_id": schema.StringAttribute{
-				Description: "Identifier",
-				Required:    true,
+			"id": schema.StringAttribute{
+				Description: "Name of the project.",
+				Computed:    true,
 			},
 			"project_name": schema.StringAttribute{
 				Description: "Name of the project.",
+				Required:    true,
+			},
+			"account_id": schema.StringAttribute{
+				Description: "Identifier.",
 				Required:    true,
 			},
 			"created_on": schema.StringAttribute{
@@ -38,10 +42,6 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 			},
 			"framework_version": schema.StringAttribute{
 				Description: "Version of the framework the project is using.",
-				Computed:    true,
-			},
-			"id": schema.StringAttribute{
-				Description: "ID of the project.",
 				Computed:    true,
 			},
 			"name": schema.StringAttribute{
@@ -79,6 +79,15 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 				Computed:    true,
 				CustomType:  customfield.NewNestedObjectType[PagesProjectBuildConfigDataSourceModel](ctx),
 				Attributes: map[string]schema.Attribute{
+					"web_analytics_tag": schema.StringAttribute{
+						Description: "The classifying tag for analytics.",
+						Computed:    true,
+					},
+					"web_analytics_token": schema.StringAttribute{
+						Description: "The auth token for analytics.",
+						Computed:    true,
+						Sensitive:   true,
+					},
 					"build_caching": schema.BoolAttribute{
 						Description: "Enable build caching for the project.",
 						Computed:    true,
@@ -88,21 +97,12 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 						Computed:    true,
 					},
 					"destination_dir": schema.StringAttribute{
-						Description: "Output directory of the build.",
+						Description: "Assets output directory of the build.",
 						Computed:    true,
 					},
 					"root_dir": schema.StringAttribute{
 						Description: "Directory to run the command.",
 						Computed:    true,
-					},
-					"web_analytics_tag": schema.StringAttribute{
-						Description: "The classifying tag for analytics.",
-						Computed:    true,
-					},
-					"web_analytics_token": schema.StringAttribute{
-						Description: "The auth token for analytics.",
-						Computed:    true,
-						Sensitive:   true,
 					},
 				},
 			},
@@ -126,6 +126,15 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 						Computed:    true,
 						CustomType:  customfield.NewNestedObjectType[PagesProjectCanonicalDeploymentBuildConfigDataSourceModel](ctx),
 						Attributes: map[string]schema.Attribute{
+							"web_analytics_tag": schema.StringAttribute{
+								Description: "The classifying tag for analytics.",
+								Computed:    true,
+							},
+							"web_analytics_token": schema.StringAttribute{
+								Description: "The auth token for analytics.",
+								Computed:    true,
+								Sensitive:   true,
+							},
 							"build_caching": schema.BoolAttribute{
 								Description: "Enable build caching for the project.",
 								Computed:    true,
@@ -135,21 +144,12 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 								Computed:    true,
 							},
 							"destination_dir": schema.StringAttribute{
-								Description: "Output directory of the build.",
+								Description: "Assets output directory of the build.",
 								Computed:    true,
 							},
 							"root_dir": schema.StringAttribute{
 								Description: "Directory to run the command.",
 								Computed:    true,
-							},
-							"web_analytics_tag": schema.StringAttribute{
-								Description: "The classifying tag for analytics.",
-								Computed:    true,
-							},
-							"web_analytics_token": schema.StringAttribute{
-								Description: "The auth token for analytics.",
-								Computed:    true,
-								Sensitive:   true,
 							},
 						},
 					},
@@ -172,6 +172,10 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 										Description: "Where the trigger happened.",
 										Computed:    true,
 									},
+									"commit_dirty": schema.BoolAttribute{
+										Description: "Whether the deployment trigger commit was dirty.",
+										Computed:    true,
+									},
 									"commit_hash": schema.StringAttribute{
 										Description: "Hash of the deployment trigger commit.",
 										Computed:    true,
@@ -183,10 +187,14 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 								},
 							},
 							"type": schema.StringAttribute{
-								Description: "What caused the deployment.\nAvailable values: \"push\", \"ad_hoc\".",
+								Description: "What caused the deployment.\nAvailable values: \"github:push\", \"ad_hoc\", \"deploy_hook\".",
 								Computed:    true,
 								Validators: []validator.String{
-									stringvalidator.OneOfCaseInsensitive("push", "ad_hoc"),
+									stringvalidator.OneOfCaseInsensitive(
+										"github:push",
+										"ad_hoc",
+										"deploy_hook",
+									),
 								},
 							},
 						},
@@ -284,8 +292,9 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 						Computed:    true,
 					},
 					"source": schema.SingleNestedAttribute{
-						Computed:   true,
-						CustomType: customfield.NewNestedObjectType[PagesProjectCanonicalDeploymentSourceDataSourceModel](ctx),
+						Description: "Configs for the project source control.",
+						Computed:    true,
+						CustomType:  customfield.NewNestedObjectType[PagesProjectCanonicalDeploymentSourceDataSourceModel](ctx),
 						Attributes: map[string]schema.Attribute{
 							"config": schema.SingleNestedAttribute{
 								Computed:   true,
@@ -298,6 +307,10 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 									},
 									"owner": schema.StringAttribute{
 										Description: "The owner of the repository.",
+										Computed:    true,
+									},
+									"owner_id": schema.StringAttribute{
+										Description: "The owner ID of the repository.",
 										Computed:    true,
 									},
 									"path_excludes": schema.ListAttribute{
@@ -345,6 +358,10 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 									},
 									"production_deployments_enabled": schema.BoolAttribute{
 										Description: "Whether to trigger a production deployment on commits to the production branch.",
+										Computed:    true,
+									},
+									"repo_id": schema.StringAttribute{
+										Description: "The ID of the repository.",
 										Computed:    true,
 									},
 									"repo_name": schema.StringAttribute{
@@ -411,6 +428,10 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 						Description: "The live URL to view this deployment.",
 						Computed:    true,
 					},
+					"uses_functions": schema.BoolAttribute{
+						Description: "Whether the deployment uses functions.",
+						Computed:    true,
+					},
 				},
 			},
 			"deployment_configs": schema.SingleNestedAttribute{
@@ -423,6 +444,61 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 						Computed:    true,
 						CustomType:  customfield.NewNestedObjectType[PagesProjectDeploymentConfigsPreviewDataSourceModel](ctx),
 						Attributes: map[string]schema.Attribute{
+							"always_use_latest_compatibility_date": schema.BoolAttribute{
+								Description: "Whether to always use the latest compatibility date for Pages Functions.",
+								Computed:    true,
+							},
+							"build_image_major_version": schema.Int64Attribute{
+								Description: "The major version of the build image to use for Pages Functions.",
+								Computed:    true,
+							},
+							"compatibility_date": schema.StringAttribute{
+								Description: "Compatibility date used for Pages Functions.",
+								Computed:    true,
+							},
+							"compatibility_flags": schema.ListAttribute{
+								Description: "Compatibility flags used for Pages Functions.",
+								Computed:    true,
+								CustomType:  customfield.NewListType[types.String](ctx),
+								ElementType: types.StringType,
+							},
+							"env_vars": schema.MapNestedAttribute{
+								Description: "Environment variables used for builds and Pages Functions.",
+								Computed:    true,
+								CustomType:  customfield.NewNestedObjectMapType[PagesProjectDeploymentConfigsPreviewEnvVarsDataSourceModel](ctx),
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"type": schema.StringAttribute{
+											Description: `Available values: "plain_text", "secret_text".`,
+											Computed:    true,
+											Validators: []validator.String{
+												stringvalidator.OneOfCaseInsensitive("plain_text", "secret_text"),
+											},
+										},
+										"value": schema.StringAttribute{
+											Description: "Environment variable value.",
+											Computed:    true,
+											Sensitive:   true,
+										},
+									},
+								},
+							},
+							"fail_open": schema.BoolAttribute{
+								Description: "Whether to fail open when the deployment config cannot be applied.",
+								Computed:    true,
+							},
+							"usage_model": schema.StringAttribute{
+								Description:        "The usage model for Pages Functions.\nAvailable values: \"standard\", \"bundled\", \"unbound\".",
+								Computed:           true,
+								DeprecationMessage: "All new projects now use the Standard usage model.",
+								Validators: []validator.String{
+									stringvalidator.OneOfCaseInsensitive(
+										"standard",
+										"bundled",
+										"unbound",
+									),
+								},
+							},
 							"ai_bindings": schema.MapNestedAttribute{
 								Description: "Constellation bindings used for Pages Functions.",
 								Computed:    true,
@@ -434,10 +510,6 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 										},
 									},
 								},
-							},
-							"always_use_latest_compatibility_date": schema.BoolAttribute{
-								Description: "Whether to always use the latest compatibility date for Pages Functions.",
-								Computed:    true,
 							},
 							"analytics_engine_datasets": schema.MapNestedAttribute{
 								Description: "Analytics Engine bindings used for Pages Functions.",
@@ -459,20 +531,6 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 								NestedObject: schema.NestedAttributeObject{
 									Attributes: map[string]schema.Attribute{},
 								},
-							},
-							"build_image_major_version": schema.Int64Attribute{
-								Description: "The major version of the build image to use for Pages Functions.",
-								Computed:    true,
-							},
-							"compatibility_date": schema.StringAttribute{
-								Description: "Compatibility date used for Pages Functions.",
-								Computed:    true,
-							},
-							"compatibility_flags": schema.ListAttribute{
-								Description: "Compatibility flags used for Pages Functions.",
-								Computed:    true,
-								CustomType:  customfield.NewListType[types.String](ctx),
-								ElementType: types.StringType,
 							},
 							"d1_databases": schema.MapNestedAttribute{
 								Description: "D1 databases used for Pages Functions.",
@@ -499,31 +557,6 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 										},
 									},
 								},
-							},
-							"env_vars": schema.MapNestedAttribute{
-								Description: "Environment variables used for builds and Pages Functions.",
-								Computed:    true,
-								CustomType:  customfield.NewNestedObjectMapType[PagesProjectDeploymentConfigsPreviewEnvVarsDataSourceModel](ctx),
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{
-										"type": schema.StringAttribute{
-											Description: `Available values: "plain_text", "secret_text".`,
-											Computed:    true,
-											Validators: []validator.String{
-												stringvalidator.OneOfCaseInsensitive("plain_text", "secret_text"),
-											},
-										},
-										"value": schema.StringAttribute{
-											Description: "Environment variable value.",
-											Computed:    true,
-											Sensitive:   true,
-										},
-									},
-								},
-							},
-							"fail_open": schema.BoolAttribute{
-								Description: "Whether to fail open when the deployment config cannot be applied.",
-								Computed:    true,
 							},
 							"hyperdrive_bindings": schema.MapNestedAttribute{
 								Description: "Hyperdrive bindings used for Pages Functions.",
@@ -603,12 +636,12 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 								CustomType:  customfield.NewNestedObjectMapType[PagesProjectDeploymentConfigsPreviewR2BucketsDataSourceModel](ctx),
 								NestedObject: schema.NestedAttributeObject{
 									Attributes: map[string]schema.Attribute{
-										"jurisdiction": schema.StringAttribute{
-											Description: "Jurisdiction of the R2 bucket.",
-											Computed:    true,
-										},
 										"name": schema.StringAttribute{
 											Description: "Name of the R2 bucket.",
+											Computed:    true,
+										},
+										"jurisdiction": schema.StringAttribute{
+											Description: "Jurisdiction of the R2 bucket.",
 											Computed:    true,
 										},
 									},
@@ -620,10 +653,6 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 								CustomType:  customfield.NewNestedObjectMapType[PagesProjectDeploymentConfigsPreviewServicesDataSourceModel](ctx),
 								NestedObject: schema.NestedAttributeObject{
 									Attributes: map[string]schema.Attribute{
-										"entrypoint": schema.StringAttribute{
-											Description: "The entrypoint to bind to.",
-											Computed:    true,
-										},
 										"environment": schema.StringAttribute{
 											Description: "The Service environment.",
 											Computed:    true,
@@ -632,19 +661,11 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 											Description: "The Service name.",
 											Computed:    true,
 										},
+										"entrypoint": schema.StringAttribute{
+											Description: "The entrypoint to bind to.",
+											Computed:    true,
+										},
 									},
-								},
-							},
-							"usage_model": schema.StringAttribute{
-								Description:        "The usage model for Pages Functions.\nAvailable values: \"standard\", \"bundled\", \"unbound\".",
-								Computed:           true,
-								DeprecationMessage: "All new projects now use the Standard usage model.",
-								Validators: []validator.String{
-									stringvalidator.OneOfCaseInsensitive(
-										"standard",
-										"bundled",
-										"unbound",
-									),
 								},
 							},
 							"vectorize_bindings": schema.MapNestedAttribute{
@@ -670,6 +691,61 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 						Computed:    true,
 						CustomType:  customfield.NewNestedObjectType[PagesProjectDeploymentConfigsProductionDataSourceModel](ctx),
 						Attributes: map[string]schema.Attribute{
+							"always_use_latest_compatibility_date": schema.BoolAttribute{
+								Description: "Whether to always use the latest compatibility date for Pages Functions.",
+								Computed:    true,
+							},
+							"build_image_major_version": schema.Int64Attribute{
+								Description: "The major version of the build image to use for Pages Functions.",
+								Computed:    true,
+							},
+							"compatibility_date": schema.StringAttribute{
+								Description: "Compatibility date used for Pages Functions.",
+								Computed:    true,
+							},
+							"compatibility_flags": schema.ListAttribute{
+								Description: "Compatibility flags used for Pages Functions.",
+								Computed:    true,
+								CustomType:  customfield.NewListType[types.String](ctx),
+								ElementType: types.StringType,
+							},
+							"env_vars": schema.MapNestedAttribute{
+								Description: "Environment variables used for builds and Pages Functions.",
+								Computed:    true,
+								CustomType:  customfield.NewNestedObjectMapType[PagesProjectDeploymentConfigsProductionEnvVarsDataSourceModel](ctx),
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"type": schema.StringAttribute{
+											Description: `Available values: "plain_text", "secret_text".`,
+											Computed:    true,
+											Validators: []validator.String{
+												stringvalidator.OneOfCaseInsensitive("plain_text", "secret_text"),
+											},
+										},
+										"value": schema.StringAttribute{
+											Description: "Environment variable value.",
+											Computed:    true,
+											Sensitive:   true,
+										},
+									},
+								},
+							},
+							"fail_open": schema.BoolAttribute{
+								Description: "Whether to fail open when the deployment config cannot be applied.",
+								Computed:    true,
+							},
+							"usage_model": schema.StringAttribute{
+								Description:        "The usage model for Pages Functions.\nAvailable values: \"standard\", \"bundled\", \"unbound\".",
+								Computed:           true,
+								DeprecationMessage: "All new projects now use the Standard usage model.",
+								Validators: []validator.String{
+									stringvalidator.OneOfCaseInsensitive(
+										"standard",
+										"bundled",
+										"unbound",
+									),
+								},
+							},
 							"ai_bindings": schema.MapNestedAttribute{
 								Description: "Constellation bindings used for Pages Functions.",
 								Computed:    true,
@@ -681,10 +757,6 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 										},
 									},
 								},
-							},
-							"always_use_latest_compatibility_date": schema.BoolAttribute{
-								Description: "Whether to always use the latest compatibility date for Pages Functions.",
-								Computed:    true,
 							},
 							"analytics_engine_datasets": schema.MapNestedAttribute{
 								Description: "Analytics Engine bindings used for Pages Functions.",
@@ -706,20 +778,6 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 								NestedObject: schema.NestedAttributeObject{
 									Attributes: map[string]schema.Attribute{},
 								},
-							},
-							"build_image_major_version": schema.Int64Attribute{
-								Description: "The major version of the build image to use for Pages Functions.",
-								Computed:    true,
-							},
-							"compatibility_date": schema.StringAttribute{
-								Description: "Compatibility date used for Pages Functions.",
-								Computed:    true,
-							},
-							"compatibility_flags": schema.ListAttribute{
-								Description: "Compatibility flags used for Pages Functions.",
-								Computed:    true,
-								CustomType:  customfield.NewListType[types.String](ctx),
-								ElementType: types.StringType,
 							},
 							"d1_databases": schema.MapNestedAttribute{
 								Description: "D1 databases used for Pages Functions.",
@@ -746,31 +804,6 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 										},
 									},
 								},
-							},
-							"env_vars": schema.MapNestedAttribute{
-								Description: "Environment variables used for builds and Pages Functions.",
-								Computed:    true,
-								CustomType:  customfield.NewNestedObjectMapType[PagesProjectDeploymentConfigsProductionEnvVarsDataSourceModel](ctx),
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{
-										"type": schema.StringAttribute{
-											Description: `Available values: "plain_text", "secret_text".`,
-											Computed:    true,
-											Validators: []validator.String{
-												stringvalidator.OneOfCaseInsensitive("plain_text", "secret_text"),
-											},
-										},
-										"value": schema.StringAttribute{
-											Description: "Environment variable value.",
-											Computed:    true,
-											Sensitive:   true,
-										},
-									},
-								},
-							},
-							"fail_open": schema.BoolAttribute{
-								Description: "Whether to fail open when the deployment config cannot be applied.",
-								Computed:    true,
 							},
 							"hyperdrive_bindings": schema.MapNestedAttribute{
 								Description: "Hyperdrive bindings used for Pages Functions.",
@@ -850,12 +883,12 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 								CustomType:  customfield.NewNestedObjectMapType[PagesProjectDeploymentConfigsProductionR2BucketsDataSourceModel](ctx),
 								NestedObject: schema.NestedAttributeObject{
 									Attributes: map[string]schema.Attribute{
-										"jurisdiction": schema.StringAttribute{
-											Description: "Jurisdiction of the R2 bucket.",
-											Computed:    true,
-										},
 										"name": schema.StringAttribute{
 											Description: "Name of the R2 bucket.",
+											Computed:    true,
+										},
+										"jurisdiction": schema.StringAttribute{
+											Description: "Jurisdiction of the R2 bucket.",
 											Computed:    true,
 										},
 									},
@@ -867,10 +900,6 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 								CustomType:  customfield.NewNestedObjectMapType[PagesProjectDeploymentConfigsProductionServicesDataSourceModel](ctx),
 								NestedObject: schema.NestedAttributeObject{
 									Attributes: map[string]schema.Attribute{
-										"entrypoint": schema.StringAttribute{
-											Description: "The entrypoint to bind to.",
-											Computed:    true,
-										},
 										"environment": schema.StringAttribute{
 											Description: "The Service environment.",
 											Computed:    true,
@@ -879,19 +908,11 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 											Description: "The Service name.",
 											Computed:    true,
 										},
+										"entrypoint": schema.StringAttribute{
+											Description: "The entrypoint to bind to.",
+											Computed:    true,
+										},
 									},
-								},
-							},
-							"usage_model": schema.StringAttribute{
-								Description:        "The usage model for Pages Functions.\nAvailable values: \"standard\", \"bundled\", \"unbound\".",
-								Computed:           true,
-								DeprecationMessage: "All new projects now use the Standard usage model.",
-								Validators: []validator.String{
-									stringvalidator.OneOfCaseInsensitive(
-										"standard",
-										"bundled",
-										"unbound",
-									),
 								},
 							},
 							"vectorize_bindings": schema.MapNestedAttribute{
@@ -934,6 +955,15 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 						Computed:    true,
 						CustomType:  customfield.NewNestedObjectType[PagesProjectLatestDeploymentBuildConfigDataSourceModel](ctx),
 						Attributes: map[string]schema.Attribute{
+							"web_analytics_tag": schema.StringAttribute{
+								Description: "The classifying tag for analytics.",
+								Computed:    true,
+							},
+							"web_analytics_token": schema.StringAttribute{
+								Description: "The auth token for analytics.",
+								Computed:    true,
+								Sensitive:   true,
+							},
 							"build_caching": schema.BoolAttribute{
 								Description: "Enable build caching for the project.",
 								Computed:    true,
@@ -943,21 +973,12 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 								Computed:    true,
 							},
 							"destination_dir": schema.StringAttribute{
-								Description: "Output directory of the build.",
+								Description: "Assets output directory of the build.",
 								Computed:    true,
 							},
 							"root_dir": schema.StringAttribute{
 								Description: "Directory to run the command.",
 								Computed:    true,
-							},
-							"web_analytics_tag": schema.StringAttribute{
-								Description: "The classifying tag for analytics.",
-								Computed:    true,
-							},
-							"web_analytics_token": schema.StringAttribute{
-								Description: "The auth token for analytics.",
-								Computed:    true,
-								Sensitive:   true,
 							},
 						},
 					},
@@ -980,6 +1001,10 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 										Description: "Where the trigger happened.",
 										Computed:    true,
 									},
+									"commit_dirty": schema.BoolAttribute{
+										Description: "Whether the deployment trigger commit was dirty.",
+										Computed:    true,
+									},
 									"commit_hash": schema.StringAttribute{
 										Description: "Hash of the deployment trigger commit.",
 										Computed:    true,
@@ -991,10 +1016,14 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 								},
 							},
 							"type": schema.StringAttribute{
-								Description: "What caused the deployment.\nAvailable values: \"push\", \"ad_hoc\".",
+								Description: "What caused the deployment.\nAvailable values: \"github:push\", \"ad_hoc\", \"deploy_hook\".",
 								Computed:    true,
 								Validators: []validator.String{
-									stringvalidator.OneOfCaseInsensitive("push", "ad_hoc"),
+									stringvalidator.OneOfCaseInsensitive(
+										"github:push",
+										"ad_hoc",
+										"deploy_hook",
+									),
 								},
 							},
 						},
@@ -1092,8 +1121,9 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 						Computed:    true,
 					},
 					"source": schema.SingleNestedAttribute{
-						Computed:   true,
-						CustomType: customfield.NewNestedObjectType[PagesProjectLatestDeploymentSourceDataSourceModel](ctx),
+						Description: "Configs for the project source control.",
+						Computed:    true,
+						CustomType:  customfield.NewNestedObjectType[PagesProjectLatestDeploymentSourceDataSourceModel](ctx),
 						Attributes: map[string]schema.Attribute{
 							"config": schema.SingleNestedAttribute{
 								Computed:   true,
@@ -1106,6 +1136,10 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 									},
 									"owner": schema.StringAttribute{
 										Description: "The owner of the repository.",
+										Computed:    true,
+									},
+									"owner_id": schema.StringAttribute{
+										Description: "The owner ID of the repository.",
 										Computed:    true,
 									},
 									"path_excludes": schema.ListAttribute{
@@ -1153,6 +1187,10 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 									},
 									"production_deployments_enabled": schema.BoolAttribute{
 										Description: "Whether to trigger a production deployment on commits to the production branch.",
+										Computed:    true,
+									},
+									"repo_id": schema.StringAttribute{
+										Description: "The ID of the repository.",
 										Computed:    true,
 									},
 									"repo_name": schema.StringAttribute{
@@ -1219,11 +1257,16 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 						Description: "The live URL to view this deployment.",
 						Computed:    true,
 					},
+					"uses_functions": schema.BoolAttribute{
+						Description: "Whether the deployment uses functions.",
+						Computed:    true,
+					},
 				},
 			},
 			"source": schema.SingleNestedAttribute{
-				Computed:   true,
-				CustomType: customfield.NewNestedObjectType[PagesProjectSourceDataSourceModel](ctx),
+				Description: "Configs for the project source control.",
+				Computed:    true,
+				CustomType:  customfield.NewNestedObjectType[PagesProjectSourceDataSourceModel](ctx),
 				Attributes: map[string]schema.Attribute{
 					"config": schema.SingleNestedAttribute{
 						Computed:   true,
@@ -1236,6 +1279,10 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 							},
 							"owner": schema.StringAttribute{
 								Description: "The owner of the repository.",
+								Computed:    true,
+							},
+							"owner_id": schema.StringAttribute{
+								Description: "The owner ID of the repository.",
 								Computed:    true,
 							},
 							"path_excludes": schema.ListAttribute{
@@ -1283,6 +1330,10 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 							},
 							"production_deployments_enabled": schema.BoolAttribute{
 								Description: "Whether to trigger a production deployment on commits to the production branch.",
+								Computed:    true,
+							},
+							"repo_id": schema.StringAttribute{
+								Description: "The ID of the repository.",
 								Computed:    true,
 							},
 							"repo_name": schema.StringAttribute{

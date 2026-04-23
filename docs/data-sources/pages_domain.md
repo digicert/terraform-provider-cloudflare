@@ -24,20 +24,17 @@ data "cloudflare_pages_domain" "example_pages_domain" {
 
 ### Required
 
-- `account_id` (String) Identifier
+- `account_id` (String) Identifier.
+- `domain_name` (String) The domain name.
 - `project_name` (String) Name of the project.
-
-### Optional
-
-- `domain_name` (String) Name of the domain.
 
 ### Read-Only
 
 - `certificate_authority` (String) Available values: "google", "lets_encrypt".
 - `created_on` (String)
 - `domain_id` (String)
-- `id` (String) Name of the domain.
-- `name` (String)
+- `id` (String) The domain name.
+- `name` (String) The domain name.
 - `status` (String) Available values: "initializing", "pending", "active", "deactivated", "blocked", "error".
 - `validation_data` (Attributes) (see [below for nested schema](#nestedatt--validation_data))
 - `verification_data` (Attributes) (see [below for nested schema](#nestedatt--verification_data))

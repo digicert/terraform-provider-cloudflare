@@ -26,7 +26,7 @@ resource "cloudflare_custom_pages" "example_custom_pages" {
 ### Required
 
 - `identifier` (String) Error Page Types
-Available values: "1000_errors", "500_errors", "basic_challenge", "country_challenge", "ip_block", "managed_challenge", "ratelimit_block", "under_attack", "waf_block".
+Available values: "1000_errors", "500_errors", "basic_challenge", "country_challenge", "ip_block", "managed_challenge", "ratelimit_block", "under_attack", "waf_block", "waf_challenge".
 - `state` (String) The custom page state.
 Available values: "default", "customized".
 
@@ -41,7 +41,7 @@ Available values: "default", "customized".
 - `created_on` (String)
 - `description` (String)
 - `id` (String) Error Page Types
-Available values: "1000_errors", "500_errors", "basic_challenge", "country_challenge", "ip_block", "managed_challenge", "ratelimit_block", "under_attack", "waf_block".
+Available values: "1000_errors", "500_errors", "basic_challenge", "country_challenge", "ip_block", "managed_challenge", "ratelimit_block", "under_attack", "waf_block", "waf_challenge".
 - `modified_on` (String)
 - `preview_target` (String)
 - `required_tokens` (List of String)
@@ -53,3 +53,5 @@ Import is supported using the following syntax:
 ```shell
 $ terraform import cloudflare_custom_pages.example '<{accounts|zones}/{account_id|zone_id}>/<identifier>'
 ```
+
+

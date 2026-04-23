@@ -7,7 +7,6 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 )
@@ -16,7 +15,13 @@ var _ resource.ResourceWithConfigValidators = (*WorkersScriptSubdomainResource)(
 
 func ResourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
+		Version: 500,
 		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Description:   "Identifier for the resource.",
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
 			"account_id": schema.StringAttribute{
 				Description:   "Identifier.",
 				Required:      true,
@@ -35,7 +40,6 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 				Description: "Whether the Worker's Preview URLs should be available on the workers.dev subdomain.",
 				Computed:    true,
 				Optional:    true,
-				Default:     booldefault.StaticBool(false),
 			},
 		},
 	}

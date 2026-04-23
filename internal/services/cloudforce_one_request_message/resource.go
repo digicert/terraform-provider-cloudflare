@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 
 	"github.com/cloudflare/cloudflare-go/v6"
 	"github.com/cloudflare/cloudflare-go/v6/cloudforce_one"
@@ -160,7 +159,7 @@ func (r *CloudforceOneRequestMessageResource) Read(ctx context.Context, req reso
 	env := CloudforceOneRequestMessageResultEnvelope{*data}
 	_, err := r.client.CloudforceOne.Requests.Message.Get(
 		ctx,
-		strconv.FormatInt(data.ID.ValueInt64(), 10),
+		data.RequestID.ValueString(),
 		cloudforce_one.RequestMessageGetParams{
 			AccountID: cloudflare.F(data.AccountID.ValueString()),
 		},
@@ -214,7 +213,7 @@ func (r *CloudforceOneRequestMessageResource) Delete(ctx context.Context, req re
 }
 
 func (r *CloudforceOneRequestMessageResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	var data *CloudforceOneRequestMessageModel = new(CloudforceOneRequestMessageModel)
+	var data = new(CloudforceOneRequestMessageModel)
 
 	path_account_id := ""
 	path_request_id := ""

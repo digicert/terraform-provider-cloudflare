@@ -168,6 +168,49 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 						Computed:    true,
 						Sensitive:   true,
 					},
+					"dcv_delegation_records": schema.ListNestedAttribute{
+						Description: "DCV Delegation records for domain validation.",
+						Computed:    true,
+						CustomType:  customfield.NewNestedObjectListType[CustomHostnameSSLDCVDelegationRecordsDataSourceModel](ctx),
+						NestedObject: schema.NestedAttributeObject{
+							Attributes: map[string]schema.Attribute{
+								"cname": schema.StringAttribute{
+									Description: "The CNAME record hostname for DCV delegation.",
+									Computed:    true,
+								},
+								"cname_target": schema.StringAttribute{
+									Description: "The CNAME record target value for DCV delegation.",
+									Computed:    true,
+								},
+								"emails": schema.ListAttribute{
+									Description: "The set of email addresses that the certificate authority (CA) will use to complete domain validation.",
+									Computed:    true,
+									CustomType:  customfield.NewListType[types.String](ctx),
+									ElementType: types.StringType,
+								},
+								"http_body": schema.StringAttribute{
+									Description: "The content that the certificate authority (CA) will expect to find at the http_url during the domain validation.",
+									Computed:    true,
+								},
+								"http_url": schema.StringAttribute{
+									Description: "The url that will be checked during domain validation.",
+									Computed:    true,
+								},
+								"status": schema.StringAttribute{
+									Description: "Status of the validation record.",
+									Computed:    true,
+								},
+								"txt_name": schema.StringAttribute{
+									Description: "The hostname that the certificate authority (CA) will check for a TXT record during domain validation .",
+									Computed:    true,
+								},
+								"txt_value": schema.StringAttribute{
+									Description: "The TXT record that the certificate authority (CA) will check during domain validation.",
+									Computed:    true,
+								},
+							},
+						},
+					},
 					"expires_on": schema.StringAttribute{
 						Description: "The time the custom certificate expires on.",
 						Computed:    true,
@@ -306,6 +349,14 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 						CustomType: customfield.NewNestedObjectListType[CustomHostnameSSLValidationRecordsDataSourceModel](ctx),
 						NestedObject: schema.NestedAttributeObject{
 							Attributes: map[string]schema.Attribute{
+								"cname": schema.StringAttribute{
+									Description: "The CNAME record hostname for DCV delegation.",
+									Computed:    true,
+								},
+								"cname_target": schema.StringAttribute{
+									Description: "The CNAME record target value for DCV delegation.",
+									Computed:    true,
+								},
 								"emails": schema.ListAttribute{
 									Description: "The set of email addresses that the certificate authority (CA) will use to complete domain validation.",
 									Computed:    true,
@@ -318,6 +369,10 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 								},
 								"http_url": schema.StringAttribute{
 									Description: "The url that will be checked during domain validation.",
+									Computed:    true,
+								},
+								"status": schema.StringAttribute{
+									Description: "Status of the validation record.",
 									Computed:    true,
 								},
 								"txt_name": schema.StringAttribute{
@@ -344,6 +399,21 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 						Description: "Hostname ID to match against. This ID was generated and returned during the initial custom_hostname creation. This parameter cannot be used with the 'hostname' parameter.",
 						Optional:    true,
 					},
+					"certificate_authority": schema.StringAttribute{
+						Description: "Filter by the certificate authority that issued the SSL certificate.\nAvailable values: \"google\", \"lets_encrypt\", \"ssl_com\".",
+						Optional:    true,
+						Validators: []validator.String{
+							stringvalidator.OneOfCaseInsensitive(
+								"google",
+								"lets_encrypt",
+								"ssl_com",
+							),
+						},
+					},
+					"custom_origin_server": schema.StringAttribute{
+						Description: "Filter by custom origin server name.",
+						Optional:    true,
+					},
 					"direction": schema.StringAttribute{
 						Description: "Direction to order hostnames.\nAvailable values: \"asc\", \"desc\".",
 						Optional:    true,
@@ -351,9 +421,38 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 							stringvalidator.OneOfCaseInsensitive("asc", "desc"),
 						},
 					},
-					"hostname": schema.StringAttribute{
-						Description: "Fully qualified domain name to match against. This parameter cannot be used with the 'id' parameter.",
+					"hostname": schema.SingleNestedAttribute{
+						Optional: true,
+						Attributes: map[string]schema.Attribute{
+							"contain": schema.StringAttribute{
+								Description: "Filters hostnames by a substring match on the hostname value. This parameter cannot be used with the 'id' parameter.",
+								Optional:    true,
+							},
+						},
+					},
+					"hostname_status": schema.StringAttribute{
+						Description: "Filter by the hostname's activation status.\nAvailable values: \"active\", \"pending\", \"active_redeploying\", \"moved\", \"pending_deletion\", \"deleted\", \"pending_blocked\", \"pending_migration\", \"pending_provisioned\", \"test_pending\", \"test_active\", \"test_active_apex\", \"test_blocked\", \"test_failed\", \"provisioned\", \"blocked\".",
 						Optional:    true,
+						Validators: []validator.String{
+							stringvalidator.OneOfCaseInsensitive(
+								"active",
+								"pending",
+								"active_redeploying",
+								"moved",
+								"pending_deletion",
+								"deleted",
+								"pending_blocked",
+								"pending_migration",
+								"pending_provisioned",
+								"test_pending",
+								"test_active",
+								"test_active_apex",
+								"test_blocked",
+								"test_failed",
+								"provisioned",
+								"blocked",
+							),
+						},
 					},
 					"order": schema.StringAttribute{
 						Description: "Field to order hostnames by.\nAvailable values: \"ssl\", \"ssl_status\".",
@@ -369,6 +468,39 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 						Validators: []validator.Float64{
 							float64validator.OneOf(0, 1),
 						},
+					},
+					"ssl_status": schema.StringAttribute{
+						Description: "Filter by SSL certificate status.\nAvailable values: \"initializing\", \"pending_validation\", \"deleted\", \"pending_issuance\", \"pending_deployment\", \"pending_deletion\", \"pending_expiration\", \"expired\", \"active\", \"initializing_timed_out\", \"validation_timed_out\", \"issuance_timed_out\", \"deployment_timed_out\", \"deletion_timed_out\", \"pending_cleanup\", \"staging_deployment\", \"staging_active\", \"deactivating\", \"inactive\", \"backup_issued\", \"holding_deployment\".",
+						Optional:    true,
+						Validators: []validator.String{
+							stringvalidator.OneOfCaseInsensitive(
+								"initializing",
+								"pending_validation",
+								"deleted",
+								"pending_issuance",
+								"pending_deployment",
+								"pending_deletion",
+								"pending_expiration",
+								"expired",
+								"active",
+								"initializing_timed_out",
+								"validation_timed_out",
+								"issuance_timed_out",
+								"deployment_timed_out",
+								"deletion_timed_out",
+								"pending_cleanup",
+								"staging_deployment",
+								"staging_active",
+								"deactivating",
+								"inactive",
+								"backup_issued",
+								"holding_deployment",
+							),
+						},
+					},
+					"wildcard": schema.BoolAttribute{
+						Description: "Filter by whether the custom hostname is a wildcard hostname.",
+						Optional:    true,
 					},
 				},
 			},

@@ -22,17 +22,21 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 			},
 			"policy_id": schema.StringAttribute{
 				Description: "Identifier",
-				Optional:    true,
+				Required:    true,
 			},
 			"zone_id": schema.StringAttribute{
 				Description: "Identifier",
 				Required:    true,
 			},
 			"action": schema.StringAttribute{
-				Description: "The action to take if the expression matches\nAvailable values: \"allow\", \"log\".",
+				Description: "The action to take if the expression matches\nAvailable values: \"allow\", \"log\", \"add_reporting_directives\".",
 				Computed:    true,
 				Validators: []validator.String{
-					stringvalidator.OneOfCaseInsensitive("allow", "log"),
+					stringvalidator.OneOfCaseInsensitive(
+						"allow",
+						"log",
+						"add_reporting_directives",
+					),
 				},
 			},
 			"description": schema.StringAttribute{

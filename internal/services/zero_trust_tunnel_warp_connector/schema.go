@@ -11,8 +11,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 )
@@ -21,6 +22,7 @@ var _ resource.ResourceWithConfigValidators = (*ZeroTrustTunnelWARPConnectorReso
 
 func ResourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
+		Version: 500,
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description:   "UUID of the tunnel.",
@@ -31,6 +33,13 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 				Description:   "Cloudflare account ID",
 				Required:      true,
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
+			},
+			"ha": schema.BoolAttribute{
+				Description:   "Indicates that the tunnel will be created to be highly available. If omitted, defaults to false.",
+				Computed:      true,
+				Optional:      true,
+				PlanModifiers: []planmodifier.Bool{boolplanmodifier.RequiresReplaceIfConfigured()},
+				Default:       booldefault.StaticBool(false),
 			},
 			"name": schema.StringAttribute{
 				Description: "A user-friendly name for a tunnel.",
@@ -44,14 +53,6 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 			"account_tag": schema.StringAttribute{
 				Description: "Cloudflare account ID",
 				Computed:    true,
-			},
-			"config_src": schema.StringAttribute{
-				Description: "Indicates if this is a locally or remotely configured tunnel. If `local`, manage the tunnel using a YAML file on the origin machine. If `cloudflare`, manage the tunnel on the Zero Trust dashboard.\nAvailable values: \"local\", \"cloudflare\".",
-				Computed:    true,
-				Validators: []validator.String{
-					stringvalidator.OneOfCaseInsensitive("local", "cloudflare"),
-				},
-				Default: stringdefault.StaticString("local"),
 			},
 			"conns_active_at": schema.StringAttribute{
 				Description: "Timestamp of when the tunnel established at least one connection to Cloudflare's edge. If `null`, the tunnel is inactive.",
@@ -72,11 +73,6 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 				Description: "Timestamp of when the resource was deleted. If `null`, the resource has not been deleted.",
 				Computed:    true,
 				CustomType:  timetypes.RFC3339Type{},
-			},
-			"remote_config": schema.BoolAttribute{
-				Description:        "If `true`, the tunnel can be configured remotely from the Zero Trust dashboard. If `false`, the tunnel must be configured locally on the origin machine.",
-				Computed:           true,
-				DeprecationMessage: "Use the config_src field instead.",
 			},
 			"status": schema.StringAttribute{
 				Description: "The status of the tunnel. Valid values are `inactive` (tunnel has never been run), `degraded` (tunnel is active and able to serve traffic but in an unhealthy state), `healthy` (tunnel is active and able to serve traffic), or `down` (tunnel can not serve traffic as it has no connections to the Cloudflare Edge).\nAvailable values: \"inactive\", \"degraded\", \"healthy\", \"down\".",

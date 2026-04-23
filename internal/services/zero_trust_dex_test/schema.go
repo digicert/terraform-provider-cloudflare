@@ -19,6 +19,7 @@ var _ resource.ResourceWithConfigValidators = (*ZeroTrustDEXTestResource)(nil)
 
 func ResourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
+		Version: 500,
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description:   "The unique identifier for the test.",
@@ -70,13 +71,13 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 				Optional:    true,
 			},
 			"targeted": schema.BoolAttribute{
-				Optional:      true,
+				Computed:      true,
 				PlanModifiers: []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()},
 			},
 			"target_policies": schema.ListNestedAttribute{
 				Description: "DEX rules targeted by this test",
-				Optional:    true,
 				Computed:    true,
+				Optional:    true,
 				Default:     listdefault.StaticValue(customfield.NewObjectListMust(ctx, []ZeroTrustDEXTestTargetPoliciesModel{}).ListValue),
 				CustomType:  customfield.NewNestedObjectListType[ZeroTrustDEXTestTargetPoliciesModel](ctx),
 				NestedObject: schema.NestedAttributeObject{

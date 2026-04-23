@@ -84,8 +84,25 @@ func ListDataSourceSchema(ctx context.Context) schema.Schema {
 							Computed:   true,
 							CustomType: timetypes.RFC3339Type{},
 						},
+						"description": schema.StringAttribute{
+							Computed: true,
+						},
 						"profile_id": schema.StringAttribute{
 							Computed: true,
+						},
+						"upload_status": schema.StringAttribute{
+							Description: `Available values: "empty", "uploading", "pending", "processing", "failed", "complete".`,
+							Computed:    true,
+							Validators: []validator.String{
+								stringvalidator.OneOfCaseInsensitive(
+									"empty",
+									"uploading",
+									"pending",
+									"processing",
+									"failed",
+									"complete",
+								),
+							},
 						},
 						"confidence": schema.SingleNestedAttribute{
 							Computed:   true,

@@ -2,9 +2,7 @@ package web3_hostname_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"log"
 	"os"
 	"testing"
 
@@ -14,6 +12,7 @@ import (
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/utils"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 )
 
 func TestMain(m *testing.M) {
@@ -33,27 +32,37 @@ func testSweepCloudflareWeb3Hostname(r string) error {
 	client, clientErr := acctest.SharedV1Client() // TODO(terraform): replace with SharedV2Clent
 	if clientErr != nil {
 		tflog.Error(ctx, fmt.Sprintf("Failed to create Cloudflare client: %s", clientErr))
+		return clientErr
 	}
 
 	zoneID := os.Getenv("CLOUDFLARE_ZONE_ID")
 	if zoneID == "" {
-		return errors.New("CLOUDFLARE_ZONE_ID must be set")
+		tflog.Info(ctx, "Skipping Web3 hostnames sweep: CLOUDFLARE_ZONE_ID not set")
+		return nil
 	}
 
-	hostnames, err := client.ListWeb3Hostnames(context.Background(), cloudflare.Web3HostnameListParameters{ZoneID: zoneID})
+	hostnames, err := client.ListWeb3Hostnames(ctx, cloudflare.Web3HostnameListParameters{ZoneID: zoneID})
 	if err != nil {
-		tflog.Error(ctx, fmt.Sprintf("Failed to fetch Cloudflare Web3 hostnames: %s", err))
+		tflog.Error(ctx, fmt.Sprintf("Failed to fetch Web3 hostnames: %s", err))
+		return err
 	}
 
 	if len(hostnames) == 0 {
-		log.Print("[DEBUG] No Cloudflare Web3 hostnames to sweep")
+		tflog.Info(ctx, "No Web3 hostnames to sweep")
 		return nil
 	}
 
 	for _, hostname := range hostnames {
-		tflog.Info(ctx, fmt.Sprintf("DeletingCloudflare Web3 hostname ID: %s", hostname.ID))
-		//nolint:errcheck
-		client.DeleteWeb3Hostname(context.Background(), cloudflare.Web3HostnameDetailsParameters{ZoneID: zoneID, Identifier: hostname.ID})
+		if !utils.ShouldSweepResource(hostname.Name) {
+			continue
+		}
+		tflog.Info(ctx, fmt.Sprintf("Deleting Web3 hostname: %s (%s) (zone: %s)", hostname.Name, hostname.ID, zoneID))
+		_, err := client.DeleteWeb3Hostname(ctx, cloudflare.Web3HostnameDetailsParameters{ZoneID: zoneID, Identifier: hostname.ID})
+		if err != nil {
+			tflog.Error(ctx, fmt.Sprintf("Failed to delete Web3 hostname %s: %s", hostname.ID, err))
+			continue
+		}
+		tflog.Info(ctx, fmt.Sprintf("Deleted Web3 hostname: %s", hostname.ID))
 	}
 
 	return nil
@@ -109,6 +118,44 @@ func TestAccCloudflareWeb3Hostname(t *testing.T) {
 					resource.TestCheckResourceAttr(name, "description", "test"),
 					resource.TestCheckResourceAttr(name, "dnslink", "/ipns/onboarding.ipfs.cloudflare.com"),
 				),
+			},
+		},
+	})
+}
+
+func TestAccUpgradeWeb3Hostname_FromPublishedV5(t *testing.T) {
+	rnd := utils.GenerateRandomResourceName()
+	zoneID := os.Getenv("CLOUDFLARE_ZONE_ID")
+	domain := os.Getenv("CLOUDFLARE_DOMAIN")
+
+	config := buildWeb3HostnameConfigEthereum(rnd, zoneID, domain)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() { acctest.TestAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.16.0",
+					},
+				},
+				Config:             config,
+				ExpectNonEmptyPlan: true,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectNonEmptyPlan(),
+					},
+				},
+			},
+			{
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
 			},
 		},
 	})

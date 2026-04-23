@@ -24,6 +24,7 @@ var _ resource.ResourceWithConfigValidators = (*HealthcheckResource)(nil)
 
 func ResourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
+		Version: 500,
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description:   "Identifier",
@@ -45,7 +46,9 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 			},
 			"description": schema.StringAttribute{
 				Description: "A human-readable description of the health check.",
+				Computed:    true,
 				Optional:    true,
+				Default:     stringdefault.StaticString(""),
 			},
 			"check_regions": schema.ListAttribute{
 				Description: "A list of regions from which to run health checks. Null means Cloudflare will pick a default region.",
@@ -128,7 +131,9 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 					},
 					"expected_body": schema.StringAttribute{
 						Description: "A case-insensitive sub-string to look for in the response body. If this string is not found, the origin will be marked as unhealthy.",
+						Computed:    true,
 						Optional:    true,
+						Default:     stringdefault.StaticString(""),
 					},
 					"expected_codes": schema.ListAttribute{
 						Description: `The expected HTTP response codes (e.g. "200") or code ranges (e.g. "2xx" for all codes starting with 2) of the health check.`,

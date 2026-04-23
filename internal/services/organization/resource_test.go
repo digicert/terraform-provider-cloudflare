@@ -3,25 +3,72 @@ package organization_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
+	"github.com/cloudflare/cloudflare-go/v6/organizations"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/acctest"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/utils"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
 // TestMain is the entry point for test execution
+
 func TestMain(m *testing.M) {
 	resource.TestMain(m)
 }
 
+func init() {
+	resource.AddTestSweepers("cloudflare_organization", &resource.Sweeper{
+		Name: "cloudflare_organization",
+		F:    testSweepCloudflareOrgs,
+	})
+}
+
+func testSweepCloudflareOrgs(_ string) error {
+	ctx := context.Background()
+	client := acctest.SharedClient()
+	orgID := os.Getenv("CLOUDFLARE_ORGANIZATION_ID")
+
+	if orgID == "" {
+		tflog.Info(ctx, "Skipping organizations sweep: CLOUDFLARE_ORGANIZATION_ID not set")
+		return nil
+	}
+
+	orgs, err := client.Organizations.List(ctx, organizations.OrganizationListParams{})
+	if err != nil {
+		tflog.Error(ctx, fmt.Sprintf("Failed to fetch organizations: %s", err))
+		return err
+	}
+	if len(orgs.Result) == 0 {
+		tflog.Info(ctx, "No Cloudflare organizations to sweep")
+		return nil
+	}
+
+	for _, org := range orgs.Result {
+		if !utils.ShouldSweepResource(org.Name) {
+			continue
+		}
+		tflog.Info(ctx, fmt.Sprintf("Deleting organization: %s (%s)", org.Name, org.ID))
+		_, err = client.Organizations.Delete(ctx, org.ID)
+		if err != nil {
+			tflog.Error(ctx, fmt.Sprintf("Failed to delete organization %s (%s): %s", org.Name, org.ID, err))
+			continue
+		}
+		tflog.Info(ctx, fmt.Sprintf("Deleted organization: %s (%s)", org.Name, org.ID))
+	}
+	return nil
+}
+
 // TestAccCloudflareOrganization_Basic tests the basic CRUD operations for organization resource
 func TestAccCloudflareOrganization_Basic(t *testing.T) {
+	t.Skip("User is not eligible to create an organization:  no_enterprise_accounts")
 	rnd := utils.GenerateRandomResourceName()
 	resourceName := "cloudflare_organization." + rnd
-	orgName := fmt.Sprintf("tf-acctest-%s", rnd)
-	updatedOrgName := fmt.Sprintf("tf-acctest-%s-updated", rnd)
+	orgName := rnd
+	updatedOrgName := rnd + "-updated"
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { acctest.TestAccPreCheck(t) },
@@ -66,9 +113,10 @@ func TestAccCloudflareOrganization_Basic(t *testing.T) {
 
 // TestAccCloudflareOrganization_WithProfile tests organization creation with profile information
 func TestAccCloudflareOrganization_WithProfile(t *testing.T) {
+	t.Skip("User is not eligible to create an organization:  no_enterprise_accounts")
 	rnd := utils.GenerateRandomResourceName()
 	resourceName := "cloudflare_organization." + rnd
-	orgName := fmt.Sprintf("tf-acctest-%s", rnd)
+	orgName := rnd
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { acctest.TestAccPreCheck(t) },
@@ -106,22 +154,20 @@ func TestAccCloudflareOrganization_WithProfile(t *testing.T) {
 				ResourceName:      resourceName,
 				ImportState:       true,
 				ImportStateVerify: true,
-				
+
 				ImportStateVerifyIgnore: []string{
 					"profile", // Profile fields not populated on import
 					"profile.%",
 					"profile.business_name",
-					"profile.business_email", 
+					"profile.business_email",
 					"profile.business_phone",
 					"profile.business_address",
 					"profile.external_metadata",
-				}, 
+				},
 			},
 		},
 	})
 }
-
-
 
 // Test configuration functions that load from testdata files
 

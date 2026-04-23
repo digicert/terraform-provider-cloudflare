@@ -9,6 +9,7 @@ import (
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/acctest"
@@ -18,6 +19,56 @@ import (
 
 func TestMain(m *testing.M) {
 	resource.TestMain(m)
+}
+
+func init() {
+	resource.AddTestSweepers("cloudflare_queue", &resource.Sweeper{
+		Name: "cloudflare_queue",
+		F:    testSweepCloudflareQueues,
+	})
+}
+
+func testSweepCloudflareQueues(r string) error {
+	ctx := context.Background()
+	client, clientErr := acctest.SharedV1Client()
+	if clientErr != nil {
+		tflog.Error(ctx, fmt.Sprintf("Failed to create Cloudflare client: %s", clientErr))
+		return clientErr
+	}
+
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	if accountID == "" {
+		tflog.Info(ctx, "Skipping queues sweep: CLOUDFLARE_ACCOUNT_ID not set")
+		return nil
+	}
+
+	queues, _, err := client.ListQueues(ctx, cloudflare.AccountIdentifier(accountID), cloudflare.ListQueuesParams{})
+	if err != nil {
+		tflog.Error(ctx, fmt.Sprintf("Failed to fetch queues: %s", err))
+		return fmt.Errorf("failed to fetch queues: %w", err)
+	}
+
+	if len(queues) == 0 {
+		tflog.Info(ctx, "No queues to sweep")
+		return nil
+	}
+
+	for _, queue := range queues {
+		// Use standard filtering helper
+		if !utils.ShouldSweepResource(queue.Name) {
+			continue
+		}
+
+		tflog.Info(ctx, fmt.Sprintf("Deleting queue: %s (account: %s)", queue.Name, accountID))
+		err := client.DeleteQueue(ctx, cloudflare.AccountIdentifier(accountID), queue.Name)
+		if err != nil {
+			tflog.Error(ctx, fmt.Sprintf("Failed to delete queue %s: %s", queue.Name, err))
+			continue
+		}
+		tflog.Info(ctx, fmt.Sprintf("Deleted queue: %s", queue.Name))
+	}
+
+	return nil
 }
 
 func TestAccCloudflareQueue_Settings_UpdateDeliveryPaused(t *testing.T) {
@@ -125,22 +176,39 @@ func init() {
 func testSweepCloudflareQueue(r string) error {
 	ctx := context.Background()
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	if accountID == "" {
+		tflog.Info(ctx, "Skipping queues sweep: CLOUDFLARE_ACCOUNT_ID not set")
+		return nil
+	}
 
 	client, clientErr := acctest.SharedV1Client() // TODO(terraform): replace with SharedV2Clent
 	if clientErr != nil {
 		tflog.Error(ctx, fmt.Sprintf("Failed to create Cloudflare client: %s", clientErr))
+		return clientErr
 	}
 
-	resp, _, err := client.ListQueues(context.Background(), cloudflare.AccountIdentifier(accountID), cloudflare.ListQueuesParams{})
+	resp, _, err := client.ListQueues(ctx, cloudflare.AccountIdentifier(accountID), cloudflare.ListQueuesParams{})
 	if err != nil {
+		tflog.Error(ctx, fmt.Sprintf("Failed to fetch queues: %s", err))
 		return err
 	}
 
+	if len(resp) == 0 {
+		tflog.Info(ctx, "No queues to sweep")
+		return nil
+	}
+
 	for _, q := range resp {
+		if !utils.ShouldSweepResource(q.Name) {
+			continue
+		}
+		tflog.Info(ctx, fmt.Sprintf("Deleting queue: %s (account: %s)", q.Name, accountID))
 		err := client.DeleteQueue(ctx, cloudflare.AccountIdentifier(accountID), q.Name)
 		if err != nil {
-			return err
+			tflog.Error(ctx, fmt.Sprintf("Failed to delete queue %s: %s", q.Name, err))
+			continue
 		}
+		tflog.Info(ctx, fmt.Sprintf("Deleted queue: %s", q.Name))
 	}
 
 	return nil
@@ -264,4 +332,36 @@ func testAccCheckCloudflareQueueExists(name string, queue *cloudflare.Queue) res
 
 		return fmt.Errorf("queue not found")
 	}
+}
+
+func TestAccUpgradeQueue_FromPublishedV5(t *testing.T) {
+	t.Skip("Failed to marshal state to json: schema version 0 in state does not match version 1 from the provider")
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	rnd := utils.GenerateRandomResourceName()
+
+	config := testAccCheckCloudflareQueueWithPaused(rnd, accountID, rnd)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() { acctest.TestAccPreCheck(t); acctest.TestAccPreCheck_AccountID(t) },
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.16.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+		},
+	})
 }

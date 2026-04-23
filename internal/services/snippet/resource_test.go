@@ -11,8 +11,10 @@ import (
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/acctest"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/consts"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/utils"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
@@ -35,7 +37,7 @@ func testSweepCloudflareSnippets(r string) error {
 	zoneID := os.Getenv("CLOUDFLARE_ZONE_ID")
 
 	if zoneID == "" {
-		// Skip sweeping if no zone ID is set
+		tflog.Info(ctx, "Skipping snippets sweep: CLOUDFLARE_ZONE_ID not set")
 		return nil
 	}
 
@@ -44,26 +46,39 @@ func testSweepCloudflareSnippets(r string) error {
 		ZoneID: cloudflare.F(zoneID),
 	})
 	if err != nil {
+		tflog.Error(ctx, fmt.Sprintf("Failed to list snippets: %s", err))
 		return fmt.Errorf("failed to list snippets: %w", err)
 	}
 
-	// Delete all snippets in the test zone
-	// Note: In a test environment, we assume all snippets can be deleted
+	hasSnippets := false
+	// Delete all test snippets in the zone
 	for list != nil {
 		for _, snippet := range list.Result {
+			hasSnippets = true
+			// Use standard filtering helper
+			if !utils.ShouldSweepResource(snippet.SnippetName) {
+				continue
+			}
+
+			tflog.Info(ctx, fmt.Sprintf("Deleting snippet: %s (zone: %s)", snippet.SnippetName, zoneID))
 			_, err := client.Snippets.Delete(ctx, snippet.SnippetName, snippets.SnippetDeleteParams{
 				ZoneID: cloudflare.F(zoneID),
 			})
 			if err != nil {
-				// Log but continue sweeping other snippets
+				tflog.Error(ctx, fmt.Sprintf("Failed to delete snippet %s: %s", snippet.SnippetName, err))
 				continue
 			}
+			tflog.Info(ctx, fmt.Sprintf("Deleted snippet: %s", snippet.SnippetName))
 		}
 
 		list, err = list.GetNextPage()
 		if err != nil {
 			break
 		}
+	}
+
+	if !hasSnippets {
+		tflog.Info(ctx, "No snippets to sweep")
 	}
 
 	return nil
@@ -170,4 +185,35 @@ func testAccCloudflareSnippetConfig(rnd, zoneID string) string {
 
 func testAccCloudflareSnippetConfigUpdate(rnd, zoneID string) string {
 	return acctest.LoadTestCase("basic_update.tf", rnd, zoneID)
+}
+
+func TestAccUpgradeSnippet_FromPublishedV5(t *testing.T) {
+	rnd := utils.GenerateRandomResourceName()
+	zoneID := os.Getenv("CLOUDFLARE_ZONE_ID")
+
+	config := testAccCloudflareSnippetConfig(rnd, zoneID)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() { acctest.TestAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.16.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+		},
+	})
 }

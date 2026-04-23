@@ -14,6 +14,7 @@ import (
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/consts"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/utils"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 )
 
 func TestMain(m *testing.M) {
@@ -37,7 +38,8 @@ func testSweepCloudflareMagicWanGRETunnel(r string) error {
 
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
 	if accountID == "" {
-		return fmt.Errorf("CLOUDFLARE_ACCOUNT_ID must be set")
+		tflog.Info(ctx, "Skipping GRE tunnels sweep: CLOUDFLARE_ACCOUNT_ID not set")
+		return nil
 	}
 
 	tflog.Info(ctx, "Starting to list GRE tunnels for sweeping")
@@ -58,15 +60,20 @@ func testSweepCloudflareMagicWanGRETunnel(r string) error {
 	failedCount := 0
 
 	for _, tunnel := range tunnels {
+		// Use standard filtering helper
+		if !utils.ShouldSweepResource(tunnel.Name) {
+			continue
+		}
+
 		tflog.Info(ctx, fmt.Sprintf("Deleting GRE tunnel: %s (%s)", tunnel.Name, tunnel.ID))
-		
+
 		_, err := client.DeleteMagicTransitGRETunnel(ctx, accountID, tunnel.ID)
 		if err != nil {
 			tflog.Error(ctx, fmt.Sprintf("Failed to delete GRE tunnel %s: %s", tunnel.ID, err))
 			failedCount++
 			continue
 		}
-		
+
 		deletedCount++
 		tflog.Info(ctx, fmt.Sprintf("Successfully deleted GRE tunnel: %s", tunnel.ID))
 	}
@@ -101,6 +108,8 @@ func TestAccCloudflareGRETunnelExists(t *testing.T) {
 					resource.TestCheckResourceAttr(name, "cloudflare_gre_endpoint", cfIP),
 					resource.TestCheckResourceAttr(name, "interface_address", "10.213.0.20/31"),
 					resource.TestCheckResourceAttr(name, "health_check.target.effective", "203.0.113.10"),
+					resource.TestCheckResourceAttr(name, "automatic_return_routing", "true"),
+					resource.TestCheckResourceAttr(name, "bgp.customer_asn", "65002"),
 				),
 			},
 			{
@@ -179,6 +188,13 @@ func TestAccCloudflareGRETunnelUpdateDescription(t *testing.T) {
 					resource.TestCheckResourceAttr(name, "description", rnd+"-updated"),
 				),
 			},
+			{
+				Config: testAccCheckCloudflareGRETunnelNoDescription(rnd, rnd, accountID, customerEndpoint, cfIP, interfaceAddr),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckCloudflareGRETunnelExists(name, &Tunnel),
+					resource.TestCheckResourceAttr(name, "description", rnd+"-updated"),
+				),
+			},
 		},
 	})
 }
@@ -236,6 +252,43 @@ func testAccCheckCloudflareGRETunnelSimple(ID, name, description, accountID, cfI
 	return acctest.LoadTestCase("gretunnelsimple.tf", ID, name, description, accountID, cfIP, customerEndpoint, interfaceAddr)
 }
 
+func testAccCheckCloudflareGRETunnelNoDescription(ID, name, accountID, customerEndpoint, cfIP, interfaceAddr string) string {
+	return acctest.LoadTestCase("gretunnelnodescription.tf", ID, name, accountID, customerEndpoint, cfIP, interfaceAddr)
+}
+
 func testAccCheckCloudflareGRETunnelMultiUpdate(ID, name, description, accountID, cfIP, customerEndpoint, interfaceAddr string) string {
 	return acctest.LoadTestCase("gretunnelmultiupdate.tf", ID, name, description, accountID, cfIP, customerEndpoint, interfaceAddr)
+}
+
+func TestAccUpgradeMagicWanGreTunnel_FromPublishedV5(t *testing.T) {
+	rnd := utils.GenerateRandomResourceName()
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	cfIP := utils.LookupMagicWanCfIP(t, accountID)
+	customerEndpoint := "203.0.113.10"
+	interfaceAddr := "10.213.0.20/31"
+	config := testAccCheckCloudflareGRETunnelSimple(rnd, rnd, rnd, accountID, cfIP, customerEndpoint, interfaceAddr)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() { acctest.TestAccPreCheck_AccountID(t) },
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.16.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+		},
+	})
 }

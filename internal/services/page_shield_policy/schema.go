@@ -17,6 +17,7 @@ var _ resource.ResourceWithConfigValidators = (*PageShieldPolicyResource)(nil)
 
 func ResourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
+		Version: 500,
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description:   "Identifier",
@@ -29,10 +30,14 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"action": schema.StringAttribute{
-				Description: "The action to take if the expression matches\nAvailable values: \"allow\", \"log\".",
+				Description: "The action to take if the expression matches\nAvailable values: \"allow\", \"log\", \"add_reporting_directives\".",
 				Required:    true,
 				Validators: []validator.String{
-					stringvalidator.OneOfCaseInsensitive("allow", "log"),
+					stringvalidator.OneOfCaseInsensitive(
+						"allow",
+						"log",
+						"add_reporting_directives",
+					),
 				},
 			},
 			"description": schema.StringAttribute{

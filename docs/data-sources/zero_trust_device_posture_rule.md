@@ -24,9 +24,6 @@ data "cloudflare_zero_trust_device_posture_rule" "example_zero_trust_device_post
 ### Required
 
 - `account_id` (String)
-
-### Optional
-
 - `rule_id` (String) API UUID.
 
 ### Read-Only
@@ -39,7 +36,7 @@ data "cloudflare_zero_trust_device_posture_rule" "example_zero_trust_device_post
 - `name` (String) The name of the device posture rule.
 - `schedule` (String) Polling frequency for the WARP client posture check. Default: `5m` (poll every five minutes). Minimum: `1m`.
 - `type` (String) The type of device posture rule.
-Available values: "file", "application", "tanium", "gateway", "warp", "disk_encryption", "serial_number", "sentinelone", "carbonblack", "firewall", "os_version", "domain_joined", "client_certificate", "client_certificate_v2", "unique_client_id", "kolide", "tanium_s2s", "crowdstrike_s2s", "intune", "workspace_one", "sentinelone_s2s", "custom_s2s".
+Available values: "file", "application", "tanium", "gateway", "warp", "disk_encryption", "serial_number", "sentinelone", "carbonblack", "firewall", "os_version", "domain_joined", "client_certificate", "client_certificate_v2", "antivirus", "unique_client_id", "kolide", "tanium_s2s", "crowdstrike_s2s", "intune", "workspace_one", "sentinelone_s2s", "custom_s2s".
 
 <a id="nestedatt--input"></a>
 ### Nested Schema for `input`
@@ -78,7 +75,7 @@ Available values: "<", "<=", ">", ">=", "==".
 - `os` (String) Os Version.
 - `os_distro_name` (String) Operating System Distribution Name (linux only).
 - `os_distro_revision` (String) Version of OS Distribution (linux only).
-- `os_version_extra` (String) Additional version data. For Mac or iOS, the Product Version Extra. For Linux, the distribution name and version. (Mac, iOS, and Linux only).
+- `os_version_extra` (String) Additional operating system version details. For Windows, the UBR (Update Build Revision). For Mac or iOS, the Product Version Extra. For Linux, the distribution name and version.
 - `overall` (String) Overall.
 - `path` (String) File path.
 - `require_all` (Boolean) Whether to check all disks for encryption.
@@ -94,6 +91,7 @@ Available values: "online", "offline", "unknown".
 - `subject_alternative_names` (List of String) List of certificate Subject Alternative Names.
 - `thumbprint` (String) Signing certificate thumbprint.
 - `total_score` (Number) For more details on total score, refer to the Tanium documentation.
+- `update_window_days` (Number) Number of days that the antivirus should be updated within.
 - `version` (String) Version of OS.
 - `version_operator` (String) Version Operator.
 Available values: "<", "<=", ">", ">=", "==".

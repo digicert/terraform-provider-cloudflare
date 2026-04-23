@@ -11,9 +11,11 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -23,6 +25,7 @@ var _ resource.ResourceWithConfigValidators = (*PagesProjectResource)(nil)
 
 func ResourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
+		Version: 500,
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description:   "Name of the project.",
@@ -35,7 +38,7 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown(), stringplanmodifier.RequiresReplace()},
 			},
 			"account_id": schema.StringAttribute{
-				Description:   "Identifier",
+				Description:   "Identifier.",
 				Required:      true,
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
@@ -51,542 +54,58 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 				Attributes: map[string]schema.Attribute{
 					"build_caching": schema.BoolAttribute{
 						Description: "Enable build caching for the project.",
+						Computed:    true,
 						Optional:    true,
 					},
 					"build_command": schema.StringAttribute{
 						Description: "Command used to build project.",
+						Computed:    true,
 						Optional:    true,
 					},
 					"destination_dir": schema.StringAttribute{
 						Description: "Output directory of the build.",
+						Computed:    true,
 						Optional:    true,
 					},
 					"root_dir": schema.StringAttribute{
 						Description: "Directory to run the command.",
+						Computed:    true,
 						Optional:    true,
 					},
 					"web_analytics_tag": schema.StringAttribute{
 						Description: "The classifying tag for analytics.",
+						Computed:    true,
 						Optional:    true,
 					},
 					"web_analytics_token": schema.StringAttribute{
 						Description: "The auth token for analytics.",
 						Optional:    true,
+						Computed:    true,
 						Sensitive:   true,
 					},
 				},
 			},
-			"deployment_configs": schema.SingleNestedAttribute{
-				Description: "Configs for deployments in a project.",
-				Computed:    true,
-				Optional:    true,
-				CustomType:  customfield.NewNestedObjectType[PagesProjectDeploymentConfigsModel](ctx),
-				Attributes: map[string]schema.Attribute{
-					"preview": schema.SingleNestedAttribute{
-						Description: "Configs for preview deploys.",
-						Computed:    true,
-						Optional:    true,
-						CustomType:  customfield.NewNestedObjectType[PagesProjectDeploymentConfigsPreviewModel](ctx),
-						Attributes: map[string]schema.Attribute{
-							"ai_bindings": schema.MapNestedAttribute{
-								Description: "Constellation bindings used for Pages Functions.",
-								Optional:    true,
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{
-										"project_id": schema.StringAttribute{
-											Optional: true,
-										},
-									},
-								},
-							},
-							"always_use_latest_compatibility_date": schema.BoolAttribute{
-								Description: "Whether to always use the latest compatibility date for Pages Functions.",
-								Computed:    true,
-								Optional:    true,
-								Default:     booldefault.StaticBool(false),
-							},
-							"analytics_engine_datasets": schema.MapNestedAttribute{
-								Description: "Analytics Engine bindings used for Pages Functions.",
-								Optional:    true,
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{
-										"dataset": schema.StringAttribute{
-											Description: "Name of the dataset.",
-											Optional:    true,
-										},
-									},
-								},
-							},
-							"browsers": schema.MapNestedAttribute{
-								Description: "Browser bindings used for Pages Functions.",
-								Optional:    true,
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{},
-								},
-							},
-							"build_image_major_version": schema.Int64Attribute{
-								Description: "The major version of the build image to use for Pages Functions.",
-								Computed:    true,
-								Optional:    true,
-								Default:     int64default.StaticInt64(3),
-							},
-							"compatibility_date": schema.StringAttribute{
-								Description: "Compatibility date used for Pages Functions.",
-								Computed:    true,
-								Optional:    true,
-							},
-							"compatibility_flags": schema.ListAttribute{
-								Description: "Compatibility flags used for Pages Functions.",
-								Computed:    true,
-								Optional:    true,
-								CustomType:  customfield.NewListType[types.String](ctx),
-								ElementType: types.StringType,
-							},
-							"d1_databases": schema.MapNestedAttribute{
-								Description: "D1 databases used for Pages Functions.",
-								Optional:    true,
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{
-										"id": schema.StringAttribute{
-											Description: "UUID of the D1 database.",
-											Optional:    true,
-										},
-									},
-								},
-							},
-							"durable_object_namespaces": schema.MapNestedAttribute{
-								Description: "Durable Object namespaces used for Pages Functions.",
-								Optional:    true,
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{
-										"namespace_id": schema.StringAttribute{
-											Description: "ID of the Durable Object namespace.",
-											Optional:    true,
-										},
-									},
-								},
-							},
-							"env_vars": schema.MapNestedAttribute{
-								Description: "Environment variables used for builds and Pages Functions.",
-								Optional:    true,
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{
-										"type": schema.StringAttribute{
-											Description: `Available values: "plain_text", "secret_text".`,
-											Required:    true,
-											Validators: []validator.String{
-												stringvalidator.OneOfCaseInsensitive("plain_text", "secret_text"),
-											},
-										},
-										"value": schema.StringAttribute{
-											Description: "Environment variable value.",
-											Required:    true,
-											Sensitive:   true,
-										},
-									},
-								},
-							},
-							"fail_open": schema.BoolAttribute{
-								Description: "Whether to fail open when the deployment config cannot be applied.",
-								Computed:    true,
-								Optional:    true,
-								Default:     booldefault.StaticBool(true),
-							},
-							"hyperdrive_bindings": schema.MapNestedAttribute{
-								Description: "Hyperdrive bindings used for Pages Functions.",
-								Optional:    true,
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{
-										"id": schema.StringAttribute{
-											Optional: true,
-										},
-									},
-								},
-							},
-							"kv_namespaces": schema.MapNestedAttribute{
-								Description: "KV namespaces used for Pages Functions.",
-								Optional:    true,
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{
-										"namespace_id": schema.StringAttribute{
-											Description: "ID of the KV namespace.",
-											Optional:    true,
-										},
-									},
-								},
-							},
-							"limits": schema.SingleNestedAttribute{
-								Description: "Limits for Pages Functions.",
-								Optional:    true,
-								Attributes: map[string]schema.Attribute{
-									"cpu_ms": schema.Int64Attribute{
-										Description: "CPU time limit in milliseconds.",
-										Optional:    true,
-									},
-								},
-							},
-							"mtls_certificates": schema.MapNestedAttribute{
-								Description: "mTLS bindings used for Pages Functions.",
-								Optional:    true,
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{
-										"certificate_id": schema.StringAttribute{
-											Optional: true,
-										},
-									},
-								},
-							},
-							"placement": schema.SingleNestedAttribute{
-								Description: "Placement setting used for Pages Functions.",
-								Optional:    true,
-								Attributes: map[string]schema.Attribute{
-									"mode": schema.StringAttribute{
-										Description: "Placement mode.",
-										Optional:    true,
-									},
-								},
-							},
-							"queue_producers": schema.MapNestedAttribute{
-								Description: "Queue Producer bindings used for Pages Functions.",
-								Optional:    true,
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{
-										"name": schema.StringAttribute{
-											Description: "Name of the Queue.",
-											Optional:    true,
-										},
-									},
-								},
-							},
-							"r2_buckets": schema.MapNestedAttribute{
-								Description: "R2 buckets used for Pages Functions.",
-								Optional:    true,
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{
-										"jurisdiction": schema.StringAttribute{
-											Description: "Jurisdiction of the R2 bucket.",
-											Optional:    true,
-										},
-										"name": schema.StringAttribute{
-											Description: "Name of the R2 bucket.",
-											Optional:    true,
-										},
-									},
-								},
-							},
-							"services": schema.MapNestedAttribute{
-								Description: "Services used for Pages Functions.",
-								Optional:    true,
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{
-										"entrypoint": schema.StringAttribute{
-											Description: "The entrypoint to bind to.",
-											Optional:    true,
-										},
-										"environment": schema.StringAttribute{
-											Description: "The Service environment.",
-											Optional:    true,
-										},
-										"service": schema.StringAttribute{
-											Description: "The Service name.",
-											Optional:    true,
-										},
-									},
-								},
-							},
-							"usage_model": schema.StringAttribute{
-								Description:        "The usage model for Pages Functions.\nAvailable values: \"standard\", \"bundled\", \"unbound\".",
-								Computed:           true,
-								Optional:           true,
-								DeprecationMessage: "All new projects now use the Standard usage model.",
-								Validators: []validator.String{
-									stringvalidator.OneOfCaseInsensitive(
-										"standard",
-										"bundled",
-										"unbound",
-									),
-								},
-								Default: stringdefault.StaticString("standard"),
-							},
-							"vectorize_bindings": schema.MapNestedAttribute{
-								Description: "Vectorize bindings used for Pages Functions.",
-								Optional:    true,
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{
-										"index_name": schema.StringAttribute{
-											Optional: true,
-										},
-									},
-								},
-							},
-							"wrangler_config_hash": schema.StringAttribute{
-								Description: "Hash of the Wrangler configuration used for the deployment.",
-								Optional:    true,
-							},
-						},
-					},
-					"production": schema.SingleNestedAttribute{
-						Description: "Configs for production deploys.",
-						Computed:    true,
-						Optional:    true,
-						CustomType:  customfield.NewNestedObjectType[PagesProjectDeploymentConfigsProductionModel](ctx),
-						Attributes: map[string]schema.Attribute{
-							"ai_bindings": schema.MapNestedAttribute{
-								Description: "Constellation bindings used for Pages Functions.",
-								Optional:    true,
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{
-										"project_id": schema.StringAttribute{
-											Optional: true,
-										},
-									},
-								},
-							},
-							"always_use_latest_compatibility_date": schema.BoolAttribute{
-								Description: "Whether to always use the latest compatibility date for Pages Functions.",
-								Computed:    true,
-								Optional:    true,
-								Default:     booldefault.StaticBool(false),
-							},
-							"analytics_engine_datasets": schema.MapNestedAttribute{
-								Description: "Analytics Engine bindings used for Pages Functions.",
-								Optional:    true,
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{
-										"dataset": schema.StringAttribute{
-											Description: "Name of the dataset.",
-											Optional:    true,
-										},
-									},
-								},
-							},
-							"browsers": schema.MapNestedAttribute{
-								Description: "Browser bindings used for Pages Functions.",
-								Optional:    true,
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{},
-								},
-							},
-							"build_image_major_version": schema.Int64Attribute{
-								Description: "The major version of the build image to use for Pages Functions.",
-								Computed:    true,
-								Optional:    true,
-								Default:     int64default.StaticInt64(3),
-							},
-							"compatibility_date": schema.StringAttribute{
-								Description: "Compatibility date used for Pages Functions.",
-								Computed:    true,
-								Optional:    true,
-							},
-							"compatibility_flags": schema.ListAttribute{
-								Description: "Compatibility flags used for Pages Functions.",
-								Computed:    true,
-								Optional:    true,
-								CustomType:  customfield.NewListType[types.String](ctx),
-								ElementType: types.StringType,
-							},
-							"d1_databases": schema.MapNestedAttribute{
-								Description: "D1 databases used for Pages Functions.",
-								Optional:    true,
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{
-										"id": schema.StringAttribute{
-											Description: "UUID of the D1 database.",
-											Optional:    true,
-										},
-									},
-								},
-							},
-							"durable_object_namespaces": schema.MapNestedAttribute{
-								Description: "Durable Object namespaces used for Pages Functions.",
-								Optional:    true,
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{
-										"namespace_id": schema.StringAttribute{
-											Description: "ID of the Durable Object namespace.",
-											Optional:    true,
-										},
-									},
-								},
-							},
-							"env_vars": schema.MapNestedAttribute{
-								Description: "Environment variables used for builds and Pages Functions.",
-								Optional:    true,
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{
-										"type": schema.StringAttribute{
-											Description: `Available values: "plain_text", "secret_text".`,
-											Required:    true,
-											Validators: []validator.String{
-												stringvalidator.OneOfCaseInsensitive("plain_text", "secret_text"),
-											},
-										},
-										"value": schema.StringAttribute{
-											Description: "Environment variable value.",
-											Required:    true,
-											Sensitive:   true,
-										},
-									},
-								},
-							},
-							"fail_open": schema.BoolAttribute{
-								Description: "Whether to fail open when the deployment config cannot be applied.",
-								Computed:    true,
-								Optional:    true,
-								Default:     booldefault.StaticBool(true),
-							},
-							"hyperdrive_bindings": schema.MapNestedAttribute{
-								Description: "Hyperdrive bindings used for Pages Functions.",
-								Optional:    true,
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{
-										"id": schema.StringAttribute{
-											Optional: true,
-										},
-									},
-								},
-							},
-							"kv_namespaces": schema.MapNestedAttribute{
-								Description: "KV namespaces used for Pages Functions.",
-								Optional:    true,
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{
-										"namespace_id": schema.StringAttribute{
-											Description: "ID of the KV namespace.",
-											Optional:    true,
-										},
-									},
-								},
-							},
-							"limits": schema.SingleNestedAttribute{
-								Description: "Limits for Pages Functions.",
-								Optional:    true,
-								Attributes: map[string]schema.Attribute{
-									"cpu_ms": schema.Int64Attribute{
-										Description: "CPU time limit in milliseconds.",
-										Optional:    true,
-									},
-								},
-							},
-							"mtls_certificates": schema.MapNestedAttribute{
-								Description: "mTLS bindings used for Pages Functions.",
-								Optional:    true,
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{
-										"certificate_id": schema.StringAttribute{
-											Optional: true,
-										},
-									},
-								},
-							},
-							"placement": schema.SingleNestedAttribute{
-								Description: "Placement setting used for Pages Functions.",
-								Optional:    true,
-								Attributes: map[string]schema.Attribute{
-									"mode": schema.StringAttribute{
-										Description: "Placement mode.",
-										Optional:    true,
-									},
-								},
-							},
-							"queue_producers": schema.MapNestedAttribute{
-								Description: "Queue Producer bindings used for Pages Functions.",
-								Optional:    true,
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{
-										"name": schema.StringAttribute{
-											Description: "Name of the Queue.",
-											Optional:    true,
-										},
-									},
-								},
-							},
-							"r2_buckets": schema.MapNestedAttribute{
-								Description: "R2 buckets used for Pages Functions.",
-								Optional:    true,
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{
-										"jurisdiction": schema.StringAttribute{
-											Description: "Jurisdiction of the R2 bucket.",
-											Optional:    true,
-										},
-										"name": schema.StringAttribute{
-											Description: "Name of the R2 bucket.",
-											Optional:    true,
-										},
-									},
-								},
-							},
-							"services": schema.MapNestedAttribute{
-								Description: "Services used for Pages Functions.",
-								Optional:    true,
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{
-										"entrypoint": schema.StringAttribute{
-											Description: "The entrypoint to bind to.",
-											Optional:    true,
-										},
-										"environment": schema.StringAttribute{
-											Description: "The Service environment.",
-											Optional:    true,
-										},
-										"service": schema.StringAttribute{
-											Description: "The Service name.",
-											Optional:    true,
-										},
-									},
-								},
-							},
-							"usage_model": schema.StringAttribute{
-								Description:        "The usage model for Pages Functions.\nAvailable values: \"standard\", \"bundled\", \"unbound\".",
-								Computed:           true,
-								Optional:           true,
-								DeprecationMessage: "All new projects now use the Standard usage model.",
-								Validators: []validator.String{
-									stringvalidator.OneOfCaseInsensitive(
-										"standard",
-										"bundled",
-										"unbound",
-									),
-								},
-								Default: stringdefault.StaticString("standard"),
-							},
-							"vectorize_bindings": schema.MapNestedAttribute{
-								Description: "Vectorize bindings used for Pages Functions.",
-								Optional:    true,
-								NestedObject: schema.NestedAttributeObject{
-									Attributes: map[string]schema.Attribute{
-										"index_name": schema.StringAttribute{
-											Optional: true,
-										},
-									},
-								},
-							},
-							"wrangler_config_hash": schema.StringAttribute{
-								Description: "Hash of the Wrangler configuration used for the deployment.",
-								Optional:    true,
-							},
-						},
-					},
-				},
-			},
 			"source": schema.SingleNestedAttribute{
-				Computed:   true,
-				Optional:   true,
-				CustomType: customfield.NewNestedObjectType[PagesProjectSourceModel](ctx),
+				Description: "Configs for the project source control.",
+				Optional:    true,
 				Attributes: map[string]schema.Attribute{
 					"config": schema.SingleNestedAttribute{
-						Computed:   true,
-						Optional:   true,
-						CustomType: customfield.NewNestedObjectType[PagesProjectSourceConfigModel](ctx),
+						Required: true,
 						Attributes: map[string]schema.Attribute{
 							"deployments_enabled": schema.BoolAttribute{
 								Description:        "Whether to enable automatic deployments when pushing to the source repository.\nWhen disabled, no deployments (production or preview) will be triggered automatically.",
+								Computed:           true,
 								Optional:           true,
 								DeprecationMessage: "Use `production_deployments_enabled` and `preview_deployment_setting` for more granular control.",
 							},
 							"owner": schema.StringAttribute{
 								Description: "The owner of the repository.",
+								Computed:    true,
+								Optional:    true,
+							},
+							"owner_id": schema.StringAttribute{
+								Description: "The owner ID of the repository.",
+								Computed:    true,
 								Optional:    true,
 							},
 							"path_excludes": schema.ListAttribute{
@@ -605,6 +124,7 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 							},
 							"pr_comments_enabled": schema.BoolAttribute{
 								Description: "Whether to enable PR comments.",
+								Computed:    true,
 								Optional:    true,
 							},
 							"preview_branch_excludes": schema.ListAttribute{
@@ -632,65 +152,584 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 										"custom",
 									),
 								},
-								Default: stringdefault.StaticString("all"),
 							},
 							"production_branch": schema.StringAttribute{
 								Description: "The production branch of the repository.",
+								Computed:    true,
 								Optional:    true,
 							},
 							"production_deployments_enabled": schema.BoolAttribute{
 								Description: "Whether to trigger a production deployment on commits to the production branch.",
+								Computed:    true,
+								Optional:    true,
+							},
+							"repo_id": schema.StringAttribute{
+								Description: "The ID of the repository.",
+								Computed:    true,
 								Optional:    true,
 							},
 							"repo_name": schema.StringAttribute{
 								Description: "The name of the repository.",
+								Computed:    true,
 								Optional:    true,
 							},
 						},
 					},
 					"type": schema.StringAttribute{
 						Description: "The source control management provider.\nAvailable values: \"github\", \"gitlab\".",
-						Optional:    true,
+						Required:    true,
 						Validators: []validator.String{
 							stringvalidator.OneOfCaseInsensitive("github", "gitlab"),
 						},
 					},
 				},
 			},
-			"created_on": schema.StringAttribute{
-				Description: "When the project was created.",
+			"deployment_configs": schema.SingleNestedAttribute{
+				Description: "Configs for deployments in a project.",
 				Computed:    true,
-				CustomType:  timetypes.RFC3339Type{},
+				Optional:    true,
+				CustomType:  customfield.NewNestedObjectType[PagesProjectDeploymentConfigsModel](ctx),
+				Attributes: map[string]schema.Attribute{
+					"preview": schema.SingleNestedAttribute{
+						Description: "Configs for preview deploys.",
+						Computed:    true,
+						Optional:    true,
+						CustomType:  customfield.NewNestedObjectType[PagesProjectDeploymentConfigsPreviewModel](ctx),
+						Attributes: map[string]schema.Attribute{
+							"ai_bindings": schema.MapNestedAttribute{
+								Description: "Constellation bindings used for Pages Functions.",
+								Optional:    true,
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"project_id": schema.StringAttribute{
+											Required: true,
+										},
+									},
+								},
+							},
+							"always_use_latest_compatibility_date": schema.BoolAttribute{
+								Description:   "Whether to always use the latest compatibility date for Pages Functions.",
+								Computed:      true,
+								Optional:      true,
+								Default:       booldefault.StaticBool(false),
+								PlanModifiers: []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()},
+							},
+							"analytics_engine_datasets": schema.MapNestedAttribute{
+								Description: "Analytics Engine bindings used for Pages Functions.",
+								Optional:    true,
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"dataset": schema.StringAttribute{
+											Description: "Name of the dataset.",
+											Required:    true,
+										},
+									},
+								},
+							},
+							"browsers": schema.MapNestedAttribute{
+								Description: "Browser bindings used for Pages Functions.",
+								Optional:    true,
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{},
+								},
+							},
+							"build_image_major_version": schema.Int64Attribute{
+								Description:   "The major version of the build image to use for Pages Functions.",
+								Computed:      true,
+								Optional:      true,
+								Default:       int64default.StaticInt64(3),
+								PlanModifiers: []planmodifier.Int64{int64planmodifier.UseStateForUnknown()},
+							},
+							"compatibility_date": schema.StringAttribute{
+								Description:   "Compatibility date used for Pages Functions.",
+								Computed:      true,
+								Optional:      true,
+								PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+							},
+							"compatibility_flags": schema.ListAttribute{
+								Description: "Compatibility flags used for Pages Functions.",
+								Optional:    true,
+								ElementType: types.StringType,
+							},
+							"d1_databases": schema.MapNestedAttribute{
+								Description: "D1 databases used for Pages Functions.",
+								Optional:    true,
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"id": schema.StringAttribute{
+											Description: "UUID of the D1 database.",
+											Required:    true,
+										},
+									},
+								},
+							},
+							"durable_object_namespaces": schema.MapNestedAttribute{
+								Description: "Durable Object namespaces used for Pages Functions.",
+								Optional:    true,
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"namespace_id": schema.StringAttribute{
+											Description: "ID of the Durable Object namespace.",
+											Required:    true,
+										},
+									},
+								},
+							},
+							"env_vars": schema.MapNestedAttribute{
+								Description: "Environment variables used for builds and Pages Functions.",
+								Optional:    true,
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"type": schema.StringAttribute{
+											Description: `Available values: "plain_text", "secret_text".`,
+											Required:    true,
+											Validators: []validator.String{
+												stringvalidator.OneOfCaseInsensitive("plain_text", "secret_text"),
+											},
+										},
+										"value": schema.StringAttribute{
+											Description: "Environment variable value.",
+											Required:    true,
+											Sensitive:   true,
+										},
+									},
+								},
+							},
+							"fail_open": schema.BoolAttribute{
+								Description:   "Whether to fail open when the deployment config cannot be applied.",
+								Computed:      true,
+								Optional:      true,
+								Default:       booldefault.StaticBool(true),
+								PlanModifiers: []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()},
+							},
+							"hyperdrive_bindings": schema.MapNestedAttribute{
+								Description: "Hyperdrive bindings used for Pages Functions.",
+								Optional:    true,
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"id": schema.StringAttribute{
+											Required: true,
+										},
+									},
+								},
+							},
+							"kv_namespaces": schema.MapNestedAttribute{
+								Description: "KV namespaces used for Pages Functions.",
+								Optional:    true,
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"namespace_id": schema.StringAttribute{
+											Description: "ID of the KV namespace.",
+											Required:    true,
+										},
+									},
+								},
+							},
+							"limits": schema.SingleNestedAttribute{
+								Description: "Limits for Pages Functions.",
+								Optional:    true,
+								Attributes: map[string]schema.Attribute{
+									"cpu_ms": schema.Int64Attribute{
+										Description: "CPU time limit in milliseconds.",
+										Required:    true,
+									},
+								},
+							},
+							"mtls_certificates": schema.MapNestedAttribute{
+								Description: "mTLS bindings used for Pages Functions.",
+								Optional:    true,
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"certificate_id": schema.StringAttribute{
+											Required: true,
+										},
+									},
+								},
+							},
+							"placement": schema.SingleNestedAttribute{
+								Description: "Placement setting used for Pages Functions.",
+								Optional:    true,
+								Attributes: map[string]schema.Attribute{
+									"mode": schema.StringAttribute{
+										Description: "Placement mode.",
+										Optional:    true,
+									},
+								},
+							},
+							"queue_producers": schema.MapNestedAttribute{
+								Description: "Queue Producer bindings used for Pages Functions.",
+								Optional:    true,
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"name": schema.StringAttribute{
+											Description: "Name of the Queue.",
+											Required:    true,
+										},
+									},
+								},
+							},
+							"r2_buckets": schema.MapNestedAttribute{
+								Description: "R2 buckets used for Pages Functions.",
+								Optional:    true,
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"name": schema.StringAttribute{
+											Description: "Name of the R2 bucket.",
+											Required:    true,
+										},
+										"jurisdiction": schema.StringAttribute{
+											Description: "Jurisdiction of the R2 bucket.",
+											Optional:    true,
+										},
+									},
+								},
+							},
+							"services": schema.MapNestedAttribute{
+								Description: "Services used for Pages Functions.",
+								Optional:    true,
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"service": schema.StringAttribute{
+											Description: "The Service name.",
+											Required:    true,
+										},
+										"entrypoint": schema.StringAttribute{
+											Description: "The entrypoint to bind to.",
+											Optional:    true,
+										},
+										"environment": schema.StringAttribute{
+											Description: "The Service environment.",
+											Computed:    true,
+											Optional:    true,
+										},
+									},
+								},
+							},
+							"usage_model": schema.StringAttribute{
+								Description:        "The usage model for Pages Functions.\nAvailable values: \"standard\", \"bundled\", \"unbound\".",
+								Computed:           true,
+								Optional:           true,
+								DeprecationMessage: "All new projects now use the Standard usage model.",
+								PlanModifiers: []planmodifier.String{
+									stringplanmodifier.UseStateForUnknown(),
+								},
+								Validators: []validator.String{
+									stringvalidator.OneOfCaseInsensitive(
+										"standard",
+										"bundled",
+										"unbound",
+									),
+								},
+							},
+							"vectorize_bindings": schema.MapNestedAttribute{
+								Description: "Vectorize bindings used for Pages Functions.",
+								Optional:    true,
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"index_name": schema.StringAttribute{
+											Required: true,
+										},
+									},
+								},
+							},
+							"wrangler_config_hash": schema.StringAttribute{
+								Description: "Hash of the Wrangler configuration used for the deployment.",
+								Optional:    true,
+							},
+						},
+					},
+					"production": schema.SingleNestedAttribute{
+						Description: "Configs for production deploys.",
+						Computed:    true,
+						Optional:    true,
+						CustomType:  customfield.NewNestedObjectType[PagesProjectDeploymentConfigsProductionModel](ctx),
+						Attributes: map[string]schema.Attribute{
+							"ai_bindings": schema.MapNestedAttribute{
+								Description: "Constellation bindings used for Pages Functions.",
+								Optional:    true,
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"project_id": schema.StringAttribute{
+											Required: true,
+										},
+									},
+								},
+							},
+							"always_use_latest_compatibility_date": schema.BoolAttribute{
+								Description:   "Whether to always use the latest compatibility date for Pages Functions.",
+								Computed:      true,
+								Optional:      true,
+								Default:       booldefault.StaticBool(false),
+								PlanModifiers: []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()},
+							},
+							"analytics_engine_datasets": schema.MapNestedAttribute{
+								Description: "Analytics Engine bindings used for Pages Functions.",
+								Optional:    true,
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"dataset": schema.StringAttribute{
+											Description: "Name of the dataset.",
+											Required:    true,
+										},
+									},
+								},
+							},
+							"browsers": schema.MapNestedAttribute{
+								Description: "Browser bindings used for Pages Functions.",
+								Optional:    true,
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{},
+								},
+							},
+							"build_image_major_version": schema.Int64Attribute{
+								Description:   "The major version of the build image to use for Pages Functions.",
+								Computed:      true,
+								Optional:      true,
+								Default:       int64default.StaticInt64(3),
+								PlanModifiers: []planmodifier.Int64{int64planmodifier.UseStateForUnknown()},
+							},
+							"compatibility_date": schema.StringAttribute{
+								Description:   "Compatibility date used for Pages Functions.",
+								Computed:      true,
+								Optional:      true,
+								PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+							},
+							"compatibility_flags": schema.ListAttribute{
+								Description: "Compatibility flags used for Pages Functions.",
+								Optional:    true,
+								ElementType: types.StringType,
+							},
+							"d1_databases": schema.MapNestedAttribute{
+								Description: "D1 databases used for Pages Functions.",
+								Optional:    true,
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"id": schema.StringAttribute{
+											Description: "UUID of the D1 database.",
+											Required:    true,
+										},
+									},
+								},
+							},
+							"durable_object_namespaces": schema.MapNestedAttribute{
+								Description: "Durable Object namespaces used for Pages Functions.",
+								Optional:    true,
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"namespace_id": schema.StringAttribute{
+											Description: "ID of the Durable Object namespace.",
+											Required:    true,
+										},
+									},
+								},
+							},
+							"env_vars": schema.MapNestedAttribute{
+								Description: "Environment variables used for builds and Pages Functions.",
+								Optional:    true,
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"type": schema.StringAttribute{
+											Description: `Available values: "plain_text", "secret_text".`,
+											Required:    true,
+											Validators: []validator.String{
+												stringvalidator.OneOfCaseInsensitive("plain_text", "secret_text"),
+											},
+										},
+										"value": schema.StringAttribute{
+											Description: "Environment variable value.",
+											Required:    true,
+											Sensitive:   true,
+										},
+									},
+								},
+							},
+							"fail_open": schema.BoolAttribute{
+								Description:   "Whether to fail open when the deployment config cannot be applied.",
+								Computed:      true,
+								Optional:      true,
+								Default:       booldefault.StaticBool(true),
+								PlanModifiers: []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()},
+							},
+							"hyperdrive_bindings": schema.MapNestedAttribute{
+								Description: "Hyperdrive bindings used for Pages Functions.",
+								Optional:    true,
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"id": schema.StringAttribute{
+											Required: true,
+										},
+									},
+								},
+							},
+							"kv_namespaces": schema.MapNestedAttribute{
+								Description: "KV namespaces used for Pages Functions.",
+								Optional:    true,
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"namespace_id": schema.StringAttribute{
+											Description: "ID of the KV namespace.",
+											Required:    true,
+										},
+									},
+								},
+							},
+							"limits": schema.SingleNestedAttribute{
+								Description: "Limits for Pages Functions.",
+								Optional:    true,
+								Attributes: map[string]schema.Attribute{
+									"cpu_ms": schema.Int64Attribute{
+										Description: "CPU time limit in milliseconds.",
+										Required:    true,
+									},
+								},
+							},
+							"mtls_certificates": schema.MapNestedAttribute{
+								Description: "mTLS bindings used for Pages Functions.",
+								Optional:    true,
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"certificate_id": schema.StringAttribute{
+											Required: true,
+										},
+									},
+								},
+							},
+							"placement": schema.SingleNestedAttribute{
+								Description: "Placement setting used for Pages Functions.",
+								Optional:    true,
+								Attributes: map[string]schema.Attribute{
+									"mode": schema.StringAttribute{
+										Description: "Placement mode.",
+										Optional:    true,
+									},
+								},
+							},
+							"queue_producers": schema.MapNestedAttribute{
+								Description: "Queue Producer bindings used for Pages Functions.",
+								Optional:    true,
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"name": schema.StringAttribute{
+											Description: "Name of the Queue.",
+											Required:    true,
+										},
+									},
+								},
+							},
+							"r2_buckets": schema.MapNestedAttribute{
+								Description: "R2 buckets used for Pages Functions.",
+								Optional:    true,
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"name": schema.StringAttribute{
+											Description: "Name of the R2 bucket.",
+											Required:    true,
+										},
+										"jurisdiction": schema.StringAttribute{
+											Description: "Jurisdiction of the R2 bucket.",
+											Optional:    true,
+										},
+									},
+								},
+							},
+							"services": schema.MapNestedAttribute{
+								Description: "Services used for Pages Functions.",
+								Optional:    true,
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"service": schema.StringAttribute{
+											Description: "The Service name.",
+											Required:    true,
+										},
+										"entrypoint": schema.StringAttribute{
+											Description: "The entrypoint to bind to.",
+											Optional:    true,
+										},
+										"environment": schema.StringAttribute{
+											Description: "The Service environment.",
+											Computed:    true,
+											Optional:    true,
+										},
+									},
+								},
+							},
+							"usage_model": schema.StringAttribute{
+								Description:        "The usage model for Pages Functions.\nAvailable values: \"standard\", \"bundled\", \"unbound\".",
+								Computed:           true,
+								Optional:           true,
+								DeprecationMessage: "All new projects now use the Standard usage model.",
+								PlanModifiers: []planmodifier.String{
+									stringplanmodifier.UseStateForUnknown(),
+								},
+								Validators: []validator.String{
+									stringvalidator.OneOfCaseInsensitive(
+										"standard",
+										"bundled",
+										"unbound",
+									),
+								},
+							},
+							"vectorize_bindings": schema.MapNestedAttribute{
+								Description: "Vectorize bindings used for Pages Functions.",
+								Optional:    true,
+								NestedObject: schema.NestedAttributeObject{
+									Attributes: map[string]schema.Attribute{
+										"index_name": schema.StringAttribute{
+											Required: true,
+										},
+									},
+								},
+							},
+							"wrangler_config_hash": schema.StringAttribute{
+								Description: "Hash of the Wrangler configuration used for the deployment.",
+								Optional:    true,
+							},
+						},
+					},
+				},
+			},
+			"created_on": schema.StringAttribute{
+				Description:   "When the project was created.",
+				Computed:      true,
+				CustomType:    timetypes.RFC3339Type{},
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"framework": schema.StringAttribute{
-				Description: "Framework the project is using.",
-				Computed:    true,
+				Description:   "Framework the project is using.",
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"framework_version": schema.StringAttribute{
-				Description: "Version of the framework the project is using.",
-				Computed:    true,
+				Description:   "Version of the framework the project is using.",
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"preview_script_name": schema.StringAttribute{
-				Description: "Name of the preview script.",
-				Computed:    true,
+				Description:   "Name of the preview script.",
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"production_script_name": schema.StringAttribute{
-				Description: "Name of the production script.",
-				Computed:    true,
+				Description:   "Name of the production script.",
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"subdomain": schema.StringAttribute{
-				Description: "The Cloudflare subdomain associated with the project.",
-				Computed:    true,
+				Description:   "The Cloudflare subdomain associated with the project.",
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"uses_functions": schema.BoolAttribute{
-				Description: "Whether the project uses functions.",
-				Computed:    true,
+				Description:   "Whether the project uses functions.",
+				Computed:      true,
+				PlanModifiers: []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()},
 			},
 			"domains": schema.ListAttribute{
-				Description: "A list of associated custom domains for the project.",
-				Computed:    true,
-				CustomType:  customfield.NewListType[types.String](ctx),
-				ElementType: types.StringType,
+				Description:   "A list of associated custom domains for the project.",
+				Computed:      true,
+				CustomType:    customfield.NewListType[types.String](ctx),
+				ElementType:   types.StringType,
+				PlanModifiers: []planmodifier.List{listplanmodifier.UseStateForUnknown()},
 			},
 			"canonical_deployment": schema.SingleNestedAttribute{
 				Description: "Most recent production deployment of the project.",
@@ -712,6 +751,15 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 						Computed:    true,
 						CustomType:  customfield.NewNestedObjectType[PagesProjectCanonicalDeploymentBuildConfigModel](ctx),
 						Attributes: map[string]schema.Attribute{
+							"web_analytics_tag": schema.StringAttribute{
+								Description: "The classifying tag for analytics.",
+								Computed:    true,
+							},
+							"web_analytics_token": schema.StringAttribute{
+								Description: "The auth token for analytics.",
+								Computed:    true,
+								Sensitive:   true,
+							},
 							"build_caching": schema.BoolAttribute{
 								Description: "Enable build caching for the project.",
 								Computed:    true,
@@ -721,21 +769,12 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 								Computed:    true,
 							},
 							"destination_dir": schema.StringAttribute{
-								Description: "Output directory of the build.",
+								Description: "Assets output directory of the build.",
 								Computed:    true,
 							},
 							"root_dir": schema.StringAttribute{
 								Description: "Directory to run the command.",
 								Computed:    true,
-							},
-							"web_analytics_tag": schema.StringAttribute{
-								Description: "The classifying tag for analytics.",
-								Computed:    true,
-							},
-							"web_analytics_token": schema.StringAttribute{
-								Description: "The auth token for analytics.",
-								Computed:    true,
-								Sensitive:   true,
 							},
 						},
 					},
@@ -758,6 +797,10 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 										Description: "Where the trigger happened.",
 										Computed:    true,
 									},
+									"commit_dirty": schema.BoolAttribute{
+										Description: "Whether the deployment trigger commit was dirty.",
+										Computed:    true,
+									},
 									"commit_hash": schema.StringAttribute{
 										Description: "Hash of the deployment trigger commit.",
 										Computed:    true,
@@ -769,10 +812,14 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 								},
 							},
 							"type": schema.StringAttribute{
-								Description: "What caused the deployment.\nAvailable values: \"push\", \"ad_hoc\".",
+								Description: "What caused the deployment.\nAvailable values: \"github:push\", \"ad_hoc\", \"deploy_hook\".",
 								Computed:    true,
 								Validators: []validator.String{
-									stringvalidator.OneOfCaseInsensitive("push", "ad_hoc"),
+									stringvalidator.OneOfCaseInsensitive(
+										"github:push",
+										"ad_hoc",
+										"deploy_hook",
+									),
 								},
 							},
 						},
@@ -870,8 +917,9 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 						Computed:    true,
 					},
 					"source": schema.SingleNestedAttribute{
-						Computed:   true,
-						CustomType: customfield.NewNestedObjectType[PagesProjectCanonicalDeploymentSourceModel](ctx),
+						Description: "Configs for the project source control.",
+						Computed:    true,
+						CustomType:  customfield.NewNestedObjectType[PagesProjectCanonicalDeploymentSourceModel](ctx),
 						Attributes: map[string]schema.Attribute{
 							"config": schema.SingleNestedAttribute{
 								Computed:   true,
@@ -884,6 +932,10 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 									},
 									"owner": schema.StringAttribute{
 										Description: "The owner of the repository.",
+										Computed:    true,
+									},
+									"owner_id": schema.StringAttribute{
+										Description: "The owner ID of the repository.",
 										Computed:    true,
 									},
 									"path_excludes": schema.ListAttribute{
@@ -924,7 +976,6 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 												"custom",
 											),
 										},
-										Default: stringdefault.StaticString("all"),
 									},
 									"production_branch": schema.StringAttribute{
 										Description: "The production branch of the repository.",
@@ -932,6 +983,10 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 									},
 									"production_deployments_enabled": schema.BoolAttribute{
 										Description: "Whether to trigger a production deployment on commits to the production branch.",
+										Computed:    true,
+									},
+									"repo_id": schema.StringAttribute{
+										Description: "The ID of the repository.",
 										Computed:    true,
 									},
 									"repo_name": schema.StringAttribute{
@@ -998,6 +1053,10 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 						Description: "The live URL to view this deployment.",
 						Computed:    true,
 					},
+					"uses_functions": schema.BoolAttribute{
+						Description: "Whether the deployment uses functions.",
+						Computed:    true,
+					},
 				},
 			},
 			"latest_deployment": schema.SingleNestedAttribute{
@@ -1020,6 +1079,15 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 						Computed:    true,
 						CustomType:  customfield.NewNestedObjectType[PagesProjectLatestDeploymentBuildConfigModel](ctx),
 						Attributes: map[string]schema.Attribute{
+							"web_analytics_tag": schema.StringAttribute{
+								Description: "The classifying tag for analytics.",
+								Computed:    true,
+							},
+							"web_analytics_token": schema.StringAttribute{
+								Description: "The auth token for analytics.",
+								Computed:    true,
+								Sensitive:   true,
+							},
 							"build_caching": schema.BoolAttribute{
 								Description: "Enable build caching for the project.",
 								Computed:    true,
@@ -1029,21 +1097,12 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 								Computed:    true,
 							},
 							"destination_dir": schema.StringAttribute{
-								Description: "Output directory of the build.",
+								Description: "Assets output directory of the build.",
 								Computed:    true,
 							},
 							"root_dir": schema.StringAttribute{
 								Description: "Directory to run the command.",
 								Computed:    true,
-							},
-							"web_analytics_tag": schema.StringAttribute{
-								Description: "The classifying tag for analytics.",
-								Computed:    true,
-							},
-							"web_analytics_token": schema.StringAttribute{
-								Description: "The auth token for analytics.",
-								Computed:    true,
-								Sensitive:   true,
 							},
 						},
 					},
@@ -1066,6 +1125,10 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 										Description: "Where the trigger happened.",
 										Computed:    true,
 									},
+									"commit_dirty": schema.BoolAttribute{
+										Description: "Whether the deployment trigger commit was dirty.",
+										Computed:    true,
+									},
 									"commit_hash": schema.StringAttribute{
 										Description: "Hash of the deployment trigger commit.",
 										Computed:    true,
@@ -1077,10 +1140,14 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 								},
 							},
 							"type": schema.StringAttribute{
-								Description: "What caused the deployment.\nAvailable values: \"push\", \"ad_hoc\".",
+								Description: "What caused the deployment.\nAvailable values: \"github:push\", \"ad_hoc\", \"deploy_hook\".",
 								Computed:    true,
 								Validators: []validator.String{
-									stringvalidator.OneOfCaseInsensitive("push", "ad_hoc"),
+									stringvalidator.OneOfCaseInsensitive(
+										"github:push",
+										"ad_hoc",
+										"deploy_hook",
+									),
 								},
 							},
 						},
@@ -1178,8 +1245,9 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 						Computed:    true,
 					},
 					"source": schema.SingleNestedAttribute{
-						Computed:   true,
-						CustomType: customfield.NewNestedObjectType[PagesProjectLatestDeploymentSourceModel](ctx),
+						Description: "Configs for the project source control.",
+						Computed:    true,
+						CustomType:  customfield.NewNestedObjectType[PagesProjectLatestDeploymentSourceModel](ctx),
 						Attributes: map[string]schema.Attribute{
 							"config": schema.SingleNestedAttribute{
 								Computed:   true,
@@ -1192,6 +1260,10 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 									},
 									"owner": schema.StringAttribute{
 										Description: "The owner of the repository.",
+										Computed:    true,
+									},
+									"owner_id": schema.StringAttribute{
+										Description: "The owner ID of the repository.",
 										Computed:    true,
 									},
 									"path_excludes": schema.ListAttribute{
@@ -1232,7 +1304,6 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 												"custom",
 											),
 										},
-										Default: stringdefault.StaticString("all"),
 									},
 									"production_branch": schema.StringAttribute{
 										Description: "The production branch of the repository.",
@@ -1240,6 +1311,10 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 									},
 									"production_deployments_enabled": schema.BoolAttribute{
 										Description: "Whether to trigger a production deployment on commits to the production branch.",
+										Computed:    true,
+									},
+									"repo_id": schema.StringAttribute{
+										Description: "The ID of the repository.",
 										Computed:    true,
 									},
 									"repo_name": schema.StringAttribute{
@@ -1304,6 +1379,10 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 					},
 					"url": schema.StringAttribute{
 						Description: "The live URL to view this deployment.",
+						Computed:    true,
+					},
+					"uses_functions": schema.BoolAttribute{
+						Description: "Whether the deployment uses functions.",
 						Computed:    true,
 					},
 				},

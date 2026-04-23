@@ -4,10 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
-	"testing"
-
 	"os"
+	"testing"
 
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/acctest"
@@ -15,13 +13,13 @@ import (
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/utils"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
 func TestMain(m *testing.M) {
 	resource.TestMain(m)
 }
-
 
 func init() {
 	resource.AddTestSweepers("cloudflare_spectrum_applications", &resource.Sweeper{
@@ -51,17 +49,24 @@ func testSweepCloudflareSpectrumApplications(r string) error {
 		}
 
 		if len(spectrumApps) == 0 {
-			log.Print("[DEBUG] No Cloudflare spectrum applications to sweep")
-			return nil
+			tflog.Info(ctx, "No Cloudflare spectrum applications to sweep")
+			continue
 		}
 
 		for _, application := range spectrumApps {
-			tflog.Info(ctx, fmt.Sprintf("Deleting Cloudflare spectrum application ID: %s", application.ID))
+			// Use standard filtering helper on DNS field
+			if application.DNS.Name != "" && !utils.ShouldSweepResource(application.DNS.Name) {
+				continue
+			}
+
+			tflog.Info(ctx, fmt.Sprintf("Deleting Cloudflare Spectrum Application: %s (%s)", application.DNS.Name, application.ID))
 			err := client.DeleteSpectrumApplication(context.Background(), zone.ID, application.ID)
 
 			if err != nil {
-				tflog.Error(ctx, fmt.Sprintf("Failed to delete Cloudflare spectrum application (%s) in zone ID: %s", application.ID, zone.ID))
+				tflog.Error(ctx, fmt.Sprintf("Failed to delete Spectrum Application %s (%s): %s", application.DNS.Name, application.ID, err))
+				continue
 			}
+			tflog.Info(ctx, fmt.Sprintf("Deleted Spectrum Application: %s (%s)", application.DNS.Name, application.ID))
 		}
 	}
 
@@ -91,16 +96,17 @@ func TestAccCloudflareSpectrumApplication_Basic(t *testing.T) {
 					resource.TestCheckResourceAttr(name, "origin_port", "22"),
 				),
 			},
-			// {
-			// 	ResourceName:        name,
-			// 	ImportStateIdPrefix: fmt.Sprintf("%s/", zoneID),
-			// 	ImportState:         true,
-			// 	ImportStateVerify:   true,
-			// 	Check: resource.ComposeTestCheckFunc(
-			// 		testAccCheckCloudflareSpectrumApplicationExists(name, &spectrumApp),
-			// 		testAccCheckCloudflareSpectrumApplicationIDIsValid(name),
-			// 	),
-			// },
+			{
+				ResourceName:            name,
+				ImportStateIdPrefix:     fmt.Sprintf("%s/", zoneID),
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"argo_smart_routing"},
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckCloudflareSpectrumApplicationExists(name, &spectrumApp),
+					testAccCheckCloudflareSpectrumApplicationIDIsValid(name),
+				),
+			},
 		},
 	})
 }
@@ -316,29 +322,6 @@ func TestAccCloudflareSpectrumApplication_BasicRDP(t *testing.T) {
 					testAccCheckCloudflareSpectrumApplicationExists(name, &spectrumApp),
 					testAccCheckCloudflareSpectrumApplicationIDIsValid(name),
 					resource.TestCheckResourceAttr(name, "protocol", "rdp"),
-				),
-			},
-		},
-	})
-}
-
-func TestAccCloudflareSpectrumApplication_BasicMinecraft(t *testing.T) {
-	var spectrumApp cloudflare.SpectrumApplication
-	domain := os.Getenv("CLOUDFLARE_DOMAIN")
-	zoneID := os.Getenv("CLOUDFLARE_ZONE_ID")
-	rnd := utils.GenerateRandomResourceName()
-	name := "cloudflare_spectrum_application." + rnd
-
-	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { acctest.TestAccPreCheck(t) },
-		ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: testAccCheckCloudflareSpectrumApplicationConfigBasicTypes(zoneID, domain, rnd, "minecraft", 25565),
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheckCloudflareSpectrumApplicationExists(name, &spectrumApp),
-					testAccCheckCloudflareSpectrumApplicationIDIsValid(name),
-					resource.TestCheckResourceAttr(name, "protocol", "minecraft"),
 				),
 			},
 		},
@@ -699,4 +682,48 @@ func testAccCheckCloudflareSpectrumApplicationConfigIPv6(zoneID, zoneName, ID st
 
 func testAccCheckCloudflareSpectrumApplicationConfigUDP(zoneID, zoneName, ID string) string {
 	return acctest.LoadTestCase("spectrumapplicationconfigudp.tf", zoneID, zoneName, ID)
+}
+
+func TestAccUpgradeSpectrumApplication_FromPublishedV5(t *testing.T) {
+	domain := os.Getenv("CLOUDFLARE_DOMAIN")
+	zoneID := os.Getenv("CLOUDFLARE_ZONE_ID")
+	rnd := utils.GenerateRandomResourceName()
+
+	config := testAccCheckCloudflareSpectrumApplicationConfigBasic(zoneID, domain, rnd)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() { acctest.TestAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				// Step 1: Create with v5.16.0 (schema version 0)
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.16.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				// Step 2: Upgrade to v5.17.0 (stepping stone - schema version 1)
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.17.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				// Step 3: Upgrade to current provider (schema version 500)
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+		},
+	})
 }

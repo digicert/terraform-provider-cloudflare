@@ -32,7 +32,7 @@ resource "cloudflare_zero_trust_list" "example_zero_trust_list" {
 - `account_id` (String)
 - `name` (String) Specify the list name.
 - `type` (String) Specify the list type.
-Available values: "SERIAL", "URL", "DOMAIN", "EMAIL", "IP".
+Available values: "SERIAL", "URL", "DOMAIN", "EMAIL", "IP", "CATEGORY", "LOCATION", "DEVICE".
 
 ### Optional
 
@@ -61,3 +61,5 @@ Import is supported using the following syntax:
 ```shell
 $ terraform import cloudflare_zero_trust_list.example '<account_id>/<list_id>'
 ```
+
+

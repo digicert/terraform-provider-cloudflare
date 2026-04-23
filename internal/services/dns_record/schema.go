@@ -5,8 +5,6 @@ package dns_record
 import (
 	"context"
 
-	"github.com/cloudflare/terraform-provider-cloudflare/internal/customfield"
-	"github.com/cloudflare/terraform-provider-cloudflare/internal/customvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-jsontypes/jsontypes"
 	"github.com/hashicorp/terraform-plugin-framework-timetypes/timetypes"
 	"github.com/hashicorp/terraform-plugin-framework-validators/float64validator"
@@ -21,12 +19,16 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
+
+	"github.com/cloudflare/terraform-provider-cloudflare/internal/customfield"
+	"github.com/cloudflare/terraform-provider-cloudflare/internal/customvalidator"
 )
 
 var _ resource.ResourceWithConfigValidators = (*DNSRecordResource)(nil)
 
 func ResourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
+		Version: 500,
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description:   "Identifier.",
@@ -323,6 +325,10 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 						Optional:    true,
 					},
 				},
+			},
+			"private_routing": schema.BoolAttribute{
+				Description: "Enables private network routing to the origin.",
+				Optional:    true,
 			},
 			"proxied": schema.BoolAttribute{
 				Description: "Whether the record is receiving the performance and security benefits of Cloudflare.",

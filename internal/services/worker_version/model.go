@@ -30,8 +30,12 @@ type WorkerVersionModel struct {
 	Bindings           customfield.NestedObjectList[WorkerVersionBindingsModel] `tfsdk:"bindings" json:"bindings,optional"`
 	Limits             customfield.NestedObject[WorkerVersionLimitsModel]       `tfsdk:"limits" json:"limits,computed_optional"`
 	CreatedOn          timetypes.RFC3339                                        `tfsdk:"created_on" json:"created_on,computed" format:"date-time"`
+	MigrationTag       types.String                                             `tfsdk:"migration_tag" json:"migration_tag,computed"`
 	Number             types.Int64                                              `tfsdk:"number" json:"number,computed"`
 	Source             types.String                                             `tfsdk:"source" json:"source,computed"`
+	MainScriptBase64   types.String                                             `tfsdk:"main_script_base64" json:"main_script_base64,computed"`
+	StartupTimeMs      types.Int64                                              `tfsdk:"startup_time_ms" json:"startup_time_ms,computed"`
+	URLs               customfield.List[types.String]                           `tfsdk:"urls" json:"urls,computed"`
 }
 
 func (m WorkerVersionModel) MarshalJSON() (data []byte, err error) {
@@ -84,15 +88,25 @@ type WorkerVersionMigrationsStepsTransferredClassesModel struct {
 }
 
 type WorkerVersionModulesModel struct {
-	ContentBase64 types.String `tfsdk:"-" json:"content_base64"`
+	ContentBase64 types.String `tfsdk:"content_base64" json:"content_base64,optional"`
 	ContentType   types.String `tfsdk:"content_type" json:"content_type,required"`
 	Name          types.String `tfsdk:"name" json:"name,required"`
-	ContentFile   types.String `tfsdk:"content_file" json:"-,required"`
+	ContentFile   types.String `tfsdk:"content_file" json:"-,optional"`
 	ContentSHA256 types.String `tfsdk:"content_sha256" json:"-,computed"`
 }
 
 type WorkerVersionPlacementModel struct {
-	Mode types.String `tfsdk:"mode" json:"mode,optional"`
+	Mode     types.String                          `tfsdk:"mode" json:"mode,optional"`
+	Region   types.String                          `tfsdk:"region" json:"region,optional"`
+	Hostname types.String                          `tfsdk:"hostname" json:"hostname,optional"`
+	Host     types.String                          `tfsdk:"host" json:"host,optional"`
+	Target   *[]*WorkerVersionPlacementTargetModel `tfsdk:"target" json:"target,optional"`
+}
+
+type WorkerVersionPlacementTargetModel struct {
+	Region   types.String `tfsdk:"region" json:"region,optional"`
+	Hostname types.String `tfsdk:"hostname" json:"hostname,optional"`
+	Host     types.String `tfsdk:"host" json:"host,optional"`
 }
 
 type WorkerVersionAnnotationsModel struct {
@@ -102,43 +116,47 @@ type WorkerVersionAnnotationsModel struct {
 }
 
 type WorkerVersionAssetsModel struct {
-	Config              customfield.NestedObject[WorkerVersionAssetsConfigModel] `tfsdk:"config" json:"config,computed_optional"`
+	Config              customfield.NestedObject[WorkerVersionAssetsConfigModel] `tfsdk:"config" json:"config,optional"`
 	JWT                 types.String                                             `tfsdk:"jwt" json:"jwt,optional"`
 	Directory           types.String                                             `tfsdk:"directory" json:"-,optional"`
 	AssetManifestSHA256 types.String                                             `tfsdk:"asset_manifest_sha256" json:"-,computed"`
 }
 
 type WorkerVersionAssetsConfigModel struct {
-	HTMLHandling     types.String                   `tfsdk:"html_handling" json:"html_handling,computed_optional"`
-	NotFoundHandling types.String                   `tfsdk:"not_found_handling" json:"not_found_handling,computed_optional"`
-	RunWorkerFirst   customfield.List[types.String] `tfsdk:"run_worker_first" json:"run_worker_first,computed_optional"`
+	HTMLHandling     types.String                       `tfsdk:"html_handling" json:"html_handling,optional"`
+	NotFoundHandling types.String                       `tfsdk:"not_found_handling" json:"not_found_handling,optional"`
+	RunWorkerFirst   customfield.NormalizedDynamicValue `tfsdk:"run_worker_first" json:"run_worker_first,optional"`
 }
 
 type WorkerVersionBindingsModel struct {
 	Name                        types.String                        `tfsdk:"name" json:"name,required"`
 	Type                        types.String                        `tfsdk:"type" json:"type,required"`
+	InstanceName                types.String                        `tfsdk:"instance_name" json:"instance_name,optional"`
+	Namespace                   types.String                        `tfsdk:"namespace" json:"namespace,optional"`
 	Dataset                     types.String                        `tfsdk:"dataset" json:"dataset,optional"`
 	ID                          types.String                        `tfsdk:"id" json:"id,optional"`
 	Part                        types.String                        `tfsdk:"part" json:"part,optional"`
-	Namespace                   types.String                        `tfsdk:"namespace" json:"namespace,optional"`
 	Outbound                    *WorkerVersionBindingsOutboundModel `tfsdk:"outbound" json:"outbound,optional"`
 	ClassName                   types.String                        `tfsdk:"class_name" json:"class_name,computed_optional"`
+	DispatchNamespace           types.String                        `tfsdk:"dispatch_namespace" json:"dispatch_namespace,optional"`
 	Environment                 types.String                        `tfsdk:"environment" json:"environment,optional"`
 	NamespaceID                 types.String                        `tfsdk:"namespace_id" json:"namespace_id,computed_optional"`
 	ScriptName                  types.String                        `tfsdk:"script_name" json:"script_name,computed_optional"`
 	OldName                     types.String                        `tfsdk:"old_name" json:"old_name,optional"`
 	VersionID                   types.String                        `tfsdk:"version_id" json:"version_id,optional"`
-	Json                        types.String                        `tfsdk:"json" json:"json,optional"`
+	Json                        jsontypes.Normalized                `tfsdk:"json" json:"json,optional"`
 	CertificateID               types.String                        `tfsdk:"certificate_id" json:"certificate_id,optional"`
 	Text                        types.String                        `tfsdk:"text" json:"text,optional"`
 	Pipeline                    types.String                        `tfsdk:"pipeline" json:"pipeline,optional"`
 	QueueName                   types.String                        `tfsdk:"queue_name" json:"queue_name,optional"`
+	Simple                      *WorkerVersionBindingsSimpleModel   `tfsdk:"simple" json:"simple,optional"`
 	BucketName                  types.String                        `tfsdk:"bucket_name" json:"bucket_name,optional"`
 	Jurisdiction                types.String                        `tfsdk:"jurisdiction" json:"jurisdiction,optional"`
 	AllowedDestinationAddresses *[]types.String                     `tfsdk:"allowed_destination_addresses" json:"allowed_destination_addresses,optional"`
 	AllowedSenderAddresses      *[]types.String                     `tfsdk:"allowed_sender_addresses" json:"allowed_sender_addresses,optional"`
 	DestinationAddress          types.String                        `tfsdk:"destination_address" json:"destination_address,optional"`
 	Service                     types.String                        `tfsdk:"service" json:"service,optional"`
+	Entrypoint                  types.String                        `tfsdk:"entrypoint" json:"entrypoint,optional"`
 	IndexName                   types.String                        `tfsdk:"index_name" json:"index_name,optional"`
 	SecretName                  types.String                        `tfsdk:"secret_name" json:"secret_name,optional"`
 	StoreID                     types.String                        `tfsdk:"store_id" json:"store_id,optional"`
@@ -148,16 +166,29 @@ type WorkerVersionBindingsModel struct {
 	KeyBase64                   types.String                        `tfsdk:"key_base64" json:"key_base64,optional"`
 	KeyJwk                      jsontypes.Normalized                `tfsdk:"key_jwk" json:"key_jwk,optional"`
 	WorkflowName                types.String                        `tfsdk:"workflow_name" json:"workflow_name,optional"`
+	ServiceID                   types.String                        `tfsdk:"service_id" json:"service_id,optional"`
+	NetworkID                   types.String                        `tfsdk:"network_id" json:"network_id,optional"`
+	TunnelID                    types.String                        `tfsdk:"tunnel_id" json:"tunnel_id,optional"`
 }
 
 type WorkerVersionBindingsOutboundModel struct {
-	Params *[]types.String                           `tfsdk:"params" json:"params,optional"`
-	Worker *WorkerVersionBindingsOutboundWorkerModel `tfsdk:"worker" json:"worker,optional"`
+	Params *[]*WorkerVersionBindingsOutboundParamsModel `tfsdk:"params" json:"params,optional"`
+	Worker *WorkerVersionBindingsOutboundWorkerModel    `tfsdk:"worker" json:"worker,optional"`
+}
+
+type WorkerVersionBindingsOutboundParamsModel struct {
+	Name types.String `tfsdk:"name" json:"name,required"`
 }
 
 type WorkerVersionBindingsOutboundWorkerModel struct {
+	Entrypoint  types.String `tfsdk:"entrypoint" json:"entrypoint,optional"`
 	Environment types.String `tfsdk:"environment" json:"environment,optional"`
 	Service     types.String `tfsdk:"service" json:"service,optional"`
+}
+
+type WorkerVersionBindingsSimpleModel struct {
+	Limit  types.Float64 `tfsdk:"limit" json:"limit,required"`
+	Period types.Int64   `tfsdk:"period" json:"period,required"`
 }
 
 type WorkerVersionLimitsModel struct {

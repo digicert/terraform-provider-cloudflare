@@ -12,19 +12,24 @@ type ZeroTrustOrganizationResultEnvelope struct {
 }
 
 type ZeroTrustOrganizationModel struct {
-	AccountID                      types.String                           `tfsdk:"account_id" path:"account_id,optional"`
-	ZoneID                         types.String                           `tfsdk:"zone_id" path:"zone_id,optional"`
-	AuthDomain                     types.String                           `tfsdk:"auth_domain" json:"auth_domain,optional"`
-	Name                           types.String                           `tfsdk:"name" json:"name,optional"`
-	SessionDuration                types.String                           `tfsdk:"session_duration" json:"session_duration,optional"`
-	UIReadOnlyToggleReason         types.String                           `tfsdk:"ui_read_only_toggle_reason" json:"ui_read_only_toggle_reason,optional"`
-	UserSeatExpirationInactiveTime types.String                           `tfsdk:"user_seat_expiration_inactive_time" json:"user_seat_expiration_inactive_time,optional"`
-	WARPAuthSessionDuration        types.String                           `tfsdk:"warp_auth_session_duration" json:"warp_auth_session_duration,optional"`
-	CustomPages                    *ZeroTrustOrganizationCustomPagesModel `tfsdk:"custom_pages" json:"custom_pages,optional"`
-	LoginDesign                    *ZeroTrustOrganizationLoginDesignModel `tfsdk:"login_design" json:"login_design,optional"`
-	AllowAuthenticateViaWARP       types.Bool                             `tfsdk:"allow_authenticate_via_warp" json:"allow_authenticate_via_warp,computed_optional"`
-	AutoRedirectToIdentity         types.Bool                             `tfsdk:"auto_redirect_to_identity" json:"auto_redirect_to_identity,computed_optional"`
-	IsUIReadOnly                   types.Bool                             `tfsdk:"is_ui_read_only" json:"is_ui_read_only,computed_optional"`
+	AccountID                              types.String                           `tfsdk:"account_id" path:"account_id,optional"`
+	ZoneID                                 types.String                           `tfsdk:"zone_id" path:"zone_id,optional"`
+	AuthDomain                             types.String                           `tfsdk:"auth_domain" json:"auth_domain,optional"`
+	DenyUnmatchedRequests                  types.Bool                             `tfsdk:"deny_unmatched_requests" json:"deny_unmatched_requests,optional"`
+	Name                                   types.String                           `tfsdk:"name" json:"name,optional"`
+	SessionDuration                        types.String                           `tfsdk:"session_duration" json:"session_duration,optional"`
+	UserSeatExpirationInactiveTime         types.String                           `tfsdk:"user_seat_expiration_inactive_time" json:"user_seat_expiration_inactive_time,optional"`
+	WARPAuthSessionDuration                types.String                           `tfsdk:"warp_auth_session_duration" json:"warp_auth_session_duration,optional"`
+	DenyUnmatchedRequestsExemptedZoneNames *[]types.String                        `tfsdk:"deny_unmatched_requests_exempted_zone_names" json:"deny_unmatched_requests_exempted_zone_names,optional"`
+	CustomPages                            *ZeroTrustOrganizationCustomPagesModel `tfsdk:"custom_pages" json:"custom_pages,optional"`
+	LoginDesign                            *ZeroTrustOrganizationLoginDesignModel `tfsdk:"login_design" json:"login_design,optional"`
+	MfaConfig                              *ZeroTrustOrganizationMfaConfigModel   `tfsdk:"mfa_config" json:"mfa_config,optional"`
+	AllowAuthenticateViaWARP               types.Bool                             `tfsdk:"allow_authenticate_via_warp" json:"allow_authenticate_via_warp,computed_optional"`
+	AutoRedirectToIdentity                 types.Bool                             `tfsdk:"auto_redirect_to_identity" json:"auto_redirect_to_identity,computed_optional"`
+	IsUIReadOnly                           types.Bool                             `tfsdk:"is_ui_read_only" json:"is_ui_read_only,computed_optional"`
+	MfaConfigurationAllowed                types.Bool                             `tfsdk:"mfa_configuration_allowed" json:"mfa_configuration_allowed,computed_optional"`
+	MfaRequiredForAllApps                  types.Bool                             `tfsdk:"mfa_required_for_all_apps" json:"mfa_required_for_all_apps,computed_optional"`
+	UIReadOnlyToggleReason                 types.String                           `tfsdk:"ui_read_only_toggle_reason" json:"ui_read_only_toggle_reason,computed_optional"`
 }
 
 func (m ZeroTrustOrganizationModel) MarshalJSON() (data []byte, err error) {
@@ -46,4 +51,9 @@ type ZeroTrustOrganizationLoginDesignModel struct {
 	HeaderText      types.String `tfsdk:"header_text" json:"header_text,optional"`
 	LogoPath        types.String `tfsdk:"logo_path" json:"logo_path,optional"`
 	TextColor       types.String `tfsdk:"text_color" json:"text_color,optional"`
+}
+
+type ZeroTrustOrganizationMfaConfigModel struct {
+	AllowedAuthenticators *[]types.String `tfsdk:"allowed_authenticators" json:"allowed_authenticators,optional"`
+	SessionDuration       types.String    `tfsdk:"session_duration" json:"session_duration,optional"`
 }

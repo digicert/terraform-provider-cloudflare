@@ -9,12 +9,15 @@ description: |-
 
 
 
+~> `cloudflare_api_shield_schema` is in a deprecation phase and will be removed in the future.
+  Instead, please utilize the [cloudflare_schema_validation_schemas](./schema_validation_schemas) resource instead.
+
 ## Example Usage
 
 ```terraform
 resource "cloudflare_api_shield_schema" "example_api_shield_schema" {
   zone_id = "023e105f4ecef8ad9ca31a8372d0c353"
-  file = null
+  file = "Example data"
   kind = "openapi_v3"
   name = "petstore schema"
   validation_enabled = "true"
@@ -74,5 +77,4 @@ Read-Only:
 - `code` (Number) Code that identifies the event that occurred.
 - `locations` (List of String) JSONPath location(s) in the schema where these events were encountered.  See [https://goessner.net/articles/JsonPath/](https://goessner.net/articles/JsonPath/) for JSONPath specification.
 - `message` (String) Diagnostic message that describes the event.
-
 

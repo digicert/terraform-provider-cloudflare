@@ -24,6 +24,7 @@ var _ resource.ResourceWithConfigValidators = (*ListResource)(nil)
 
 func ResourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
+		Version: 500,
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description:   "The unique ID of the list.",
@@ -119,6 +120,7 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 								stringvalidator.ConflictsWith(path.MatchRelative().AtParent().AtName("asn")),
 								stringvalidator.ConflictsWith(path.MatchRelative().AtParent().AtName("hostname")),
 								stringvalidator.ConflictsWith(path.MatchRelative().AtParent().AtName("redirect")),
+								ipValidator(),
 							},
 						},
 						"redirect": schema.SingleNestedAttribute{

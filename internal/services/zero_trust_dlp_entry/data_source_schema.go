@@ -23,7 +23,7 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 				Computed: true,
 			},
 			"entry_id": schema.StringAttribute{
-				Optional: true,
+				Required: true,
 			},
 			"account_id": schema.StringAttribute{
 				Required: true,
@@ -35,6 +35,9 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 			"created_at": schema.StringAttribute{
 				Computed:   true,
 				CustomType: timetypes.RFC3339Type{},
+			},
+			"description": schema.StringAttribute{
+				Computed: true,
 			},
 			"enabled": schema.BoolAttribute{
 				Computed: true,
@@ -66,6 +69,20 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 				Computed:   true,
 				CustomType: timetypes.RFC3339Type{},
 			},
+			"upload_status": schema.StringAttribute{
+				Description: `Available values: "empty", "uploading", "pending", "processing", "failed", "complete".`,
+				Computed:    true,
+				Validators: []validator.String{
+					stringvalidator.OneOfCaseInsensitive(
+						"empty",
+						"uploading",
+						"pending",
+						"processing",
+						"failed",
+						"complete",
+					),
+				},
+			},
 			"confidence": schema.SingleNestedAttribute{
 				Computed:   true,
 				CustomType: customfield.NewNestedObjectType[ZeroTrustDLPEntryConfidenceDataSourceModel](ctx),
@@ -93,6 +110,20 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 						DeprecationMessage: "This attribute is deprecated.",
 						Validators: []validator.String{
 							stringvalidator.OneOfCaseInsensitive("luhn"),
+						},
+					},
+				},
+			},
+			"profiles": schema.ListNestedAttribute{
+				Computed:   true,
+				CustomType: customfield.NewNestedObjectListType[ZeroTrustDLPEntryProfilesDataSourceModel](ctx),
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"id": schema.StringAttribute{
+							Computed: true,
+						},
+						"name": schema.StringAttribute{
+							Computed: true,
 						},
 					},
 				},

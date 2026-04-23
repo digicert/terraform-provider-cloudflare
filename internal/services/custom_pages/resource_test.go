@@ -1,6 +1,7 @@
 package custom_pages_test
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"testing"
@@ -8,17 +9,41 @@ import (
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/acctest"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/consts"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/utils"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
 	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 )
+
+func TestMain(m *testing.M) {
+	resource.TestMain(m)
+}
+
+func init() {
+	resource.AddTestSweepers("cloudflare_custom_pages", &resource.Sweeper{
+		Name: "cloudflare_custom_pages",
+		F:    testSweepCloudflareCustomPages,
+	})
+}
+
+func testSweepCloudflareCustomPages(r string) error {
+	ctx := context.Background()
+	// Custom pages are zone/account-level settings for error and challenge pages.
+	// They don't create separate resources that accumulate over time - they just
+	// configure predefined page types (like 500_errors, basic_challenge, etc.).
+	// No sweeping required as there are no resources to clean up.
+	tflog.Info(ctx, "Custom pages don't require sweeping (configuration settings)")
+	return nil
+}
 
 // NOTE: https://custom-pages-waf-challenge.terraform-provider-acceptance-testing.workers.dev/ is used for all custom page types
 // that require a ::CF_WIDGET_BOX:: (including country and IP challenges), not just for waf challenges
 
 // Test account-level custom pages with basic configuration
 func TestAccCloudflareCustomPages_AccountBasic(t *testing.T) {
+	t.Skip(`Skipped: 403 Forbidden {"success":false,"errors":[{"code":1002,"message":"Forbidden. Account creation is not allowed"}],"messages":[],"result":null}`)
 	rnd := utils.GenerateRandomResourceName()
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
 	resourceName := "cloudflare_custom_pages." + rnd
@@ -553,4 +578,35 @@ func testAccCustomPagesZoneConfig(rnd, zoneID, identifier, state, url string) st
 
 func testAccCustomPagesAccountMultipleConfig(rnd, accountID string) string {
 	return acctest.LoadTestCase("account_multiple.tf", rnd, accountID)
+}
+
+func TestAccUpgradeCustomPages_FromPublishedV5(t *testing.T) {
+	rnd := utils.GenerateRandomResourceName()
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+
+	config := testAccCustomPagesAccountConfig(rnd, accountID, "basic_challenge", "default", "")
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() { acctest.TestAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.16.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+		},
+	})
 }

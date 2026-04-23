@@ -24,11 +24,10 @@ resource "cloudflare_zero_trust_dex_test" "example_zero_trust_dex_test" {
   name = "HTTP dash health check"
   description = "Checks the dash endpoint every 30 minutes"
   target_policies = [{
-    id = "id"
+    id = "f174e90a-fafe-4643-bbbc-4a0ed4fc8415"
     default = true
     name = "name"
   }]
-  targeted = true
 }
 ```
 
@@ -47,11 +46,11 @@ resource "cloudflare_zero_trust_dex_test" "example_zero_trust_dex_test" {
 
 - `description` (String) Additional details about the test.
 - `target_policies` (Attributes List) DEX rules targeted by this test (see [below for nested schema](#nestedatt--target_policies))
-- `targeted` (Boolean)
 
 ### Read-Only
 
 - `id` (String) The unique identifier for the test.
+- `targeted` (Boolean)
 - `test_id` (String) The unique identifier for the test.
 
 <a id="nestedatt--data"></a>
@@ -83,3 +82,5 @@ Import is supported using the following syntax:
 ```shell
 $ terraform import cloudflare_zero_trust_dex_test.example '<account_id>/<dex_test_id>'
 ```
+
+

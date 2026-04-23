@@ -23,18 +23,29 @@ func init() {
 	resource.AddTestSweepers("cloudflare_hyperdrive_config", &resource.Sweeper{
 		Name: "cloudflare_hyperdrive_config",
 		F: func(region string) error {
+			ctx := context.Background()
 			client, err := acctest.SharedV1Client()
 			accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
 
-			ctx := context.Background()
-
 			if err != nil {
 				tflog.Error(ctx, fmt.Sprintf("Failed to create Cloudflare client: %s", err))
+				return fmt.Errorf("error establishing client: %w", err)
+			}
+
+			if accountID == "" {
+				tflog.Info(ctx, "Skipping Hyperdrive configs sweep: CLOUDFLARE_ACCOUNT_ID not set")
+				return nil
 			}
 
 			resp, err := client.ListHyperdriveConfigs(ctx, cfv1.AccountIdentifier(accountID), cfv1.ListHyperdriveConfigParams{})
 			if err != nil {
-				return err
+				tflog.Error(ctx, fmt.Sprintf("Failed to fetch Hyperdrive configs: %s", err))
+				return fmt.Errorf("failed to fetch Hyperdrive configs: %w", err)
+			}
+
+			if len(resp) == 0 {
+				tflog.Info(ctx, "No Hyperdrive configs to sweep")
+				return nil
 			}
 
 			for _, q := range resp {
@@ -43,10 +54,17 @@ func init() {
 					continue
 				}
 
+				if !utils.ShouldSweepResource(q.Name) {
+					continue
+				}
+
+				tflog.Info(ctx, fmt.Sprintf("Deleting Hyperdrive config: %s (%s) (account: %s)", q.Name, q.ID, accountID))
 				err := client.DeleteHyperdriveConfig(ctx, cfv1.AccountIdentifier(accountID), q.ID)
 				if err != nil {
-					return err
+					tflog.Error(ctx, fmt.Sprintf("Failed to delete Hyperdrive config %s: %s", q.ID, err))
+					continue
 				}
+				tflog.Info(ctx, fmt.Sprintf("Deleted Hyperdrive config: %s", q.ID))
 			}
 
 			return nil
@@ -367,6 +385,123 @@ func TestAccCloudflareHyperdriveConfig_Minimum(t *testing.T) {
 			// 	ImportStateVerify:       true,
 			// 	ImportStateVerifyIgnore: []string{"origin.password"},
 			// },
+		},
+	})
+}
+
+// TestAccCloudflareHyperdriveConfig_NoDiffOnConsecutiveApply tests that applying the same
+// configuration twice does not result in any changes being detected.
+// This is a regression test for https://github.com/cloudflare/terraform-provider-cloudflare/issues/6650
+func TestAccCloudflareHyperdriveConfig_NoDiffOnConsecutiveApply(t *testing.T) {
+	rnd := utils.GenerateRandomResourceName()
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	databaseName := os.Getenv("CLOUDFLARE_HYPERDRIVE_DATABASE_NAME")
+	databaseHostname := os.Getenv("CLOUDFLARE_HYPERDRIVE_DATABASE_HOSTNAME")
+	databasePort := os.Getenv("CLOUDFLARE_HYPERDRIVE_DATABASE_PORT")
+	port, _ := strconv.Atoi(databasePort)
+	databaseUser := os.Getenv("CLOUDFLARE_HYPERDRIVE_DATABASE_USER")
+	databasePassword := os.Getenv("CLOUDFLARE_HYPERDRIVE_DATABASE_PASSWORD")
+	resourceName := "cloudflare_hyperdrive_config." + rnd
+
+	var origin = cfv1.HyperdriveConfigOrigin{
+		Database: databaseName,
+		Host:     databaseHostname,
+		Port:     port,
+		Scheme:   "postgres",
+		User:     databaseUser,
+	}
+
+	config := testHyperdriveConfig(
+		rnd,
+		accountID,
+		rnd,
+		databasePassword,
+		origin,
+		false,
+	)
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck: func() {
+			acctest.TestAccPreCheck(t)
+			acctest.TestAccPreCheck_Hyperdrive(t)
+		},
+		ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Initial creation
+				Config: config,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "name", rnd),
+					resource.TestCheckResourceAttr(resourceName, "origin.password", databasePassword),
+				),
+			},
+			{
+				// Same config - should not produce any changes
+				Config:             config,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
+		},
+	})
+}
+
+// TestAccCloudflareHyperdriveConfig_NoDiffOnConsecutiveApplyWithAccess tests that applying
+// the same configuration with access credentials twice does not result in any changes.
+// This is a regression test for https://github.com/cloudflare/terraform-provider-cloudflare/issues/6650
+func TestAccCloudflareHyperdriveConfig_NoDiffOnConsecutiveApplyWithAccess(t *testing.T) {
+	rnd := utils.GenerateRandomResourceName()
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	databaseName := os.Getenv("CLOUDFLARE_HYPERDRIVE_DATABASE_NAME")
+	databaseHostname := os.Getenv("CLOUDFLARE_HYPERDRIVE_DATABASE_HOSTNAME")
+	databaseUser := os.Getenv("CLOUDFLARE_HYPERDRIVE_DATABASE_USER")
+	databasePassword := os.Getenv("CLOUDFLARE_HYPERDRIVE_DATABASE_PASSWORD")
+	accessClientID := os.Getenv("CLOUDFLARE_HYPERDRIVE_ACCESS_CLIENT_ID")
+	accessClientSecret := os.Getenv("CLOUDFLARE_HYPERDRIVE_ACCESS_CLIENT_SECRET")
+	resourceName := "cloudflare_hyperdrive_config." + rnd
+
+	var origin = cfv1.HyperdriveConfigOriginWithSecrets{
+		HyperdriveConfigOrigin: cfv1.HyperdriveConfigOrigin{
+			Database:       databaseName,
+			Host:           databaseHostname,
+			Scheme:         "postgres",
+			User:           databaseUser,
+			AccessClientID: accessClientID,
+		},
+		AccessClientSecret: accessClientSecret,
+	}
+
+	config := testHyperdriveOverAccessConfig(
+		rnd,
+		accountID,
+		rnd,
+		databasePassword,
+		origin,
+		true,
+	)
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck: func() {
+			acctest.TestAccPreCheck(t)
+			acctest.TestAccPreCheck_HyperdriveWithAccess(t)
+		},
+		ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Initial creation
+				Config: config,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "name", rnd),
+					resource.TestCheckResourceAttr(resourceName, "origin.password", databasePassword),
+					resource.TestCheckResourceAttr(resourceName, "origin.access_client_id", accessClientID),
+					resource.TestCheckResourceAttr(resourceName, "origin.access_client_secret", accessClientSecret),
+				),
+			},
+			{
+				// Same config - should not produce any changes
+				Config:             config,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
+			},
 		},
 	})
 }

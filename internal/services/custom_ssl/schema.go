@@ -22,6 +22,7 @@ var _ resource.ResourceWithConfigValidators = (*CustomSSLResource)(nil)
 
 func ResourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
+		Version: 500,
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description:   "Identifier.",
@@ -44,16 +45,22 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 				Default:       stringdefault.StaticString("legacy_custom"),
 			},
 			"certificate": schema.StringAttribute{
-				Description: "The zone's SSL certificate or certificate and the intermediate(s).",
-				Required:    true,
+				Description:   "The zone's SSL certificate or certificate and the intermediate(s).",
+				Required:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"private_key": schema.StringAttribute{
-				Description: "The zone's private key.",
-				Required:    true,
-				Sensitive:   true,
+				Description:   "The zone's private key.",
+				Required:      true,
+				Sensitive:     true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
+			},
+			"custom_csr_id": schema.StringAttribute{
+				Description: "The identifier for the Custom CSR that was used.",
+				Optional:    true,
 			},
 			"policy": schema.StringAttribute{
-				Description: "Specify the policy that determines the region where your private key will be held locally. HTTPS connections to any excluded data center will still be fully encrypted, but will incur some latency while Keyless SSL is used to complete the handshake with the nearest allowed data center. Any combination of countries, specified by their two letter country code (https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2#Officially_assigned_code_elements) can be chosen, such as 'country: IN', as well as 'region: EU' which refers to the EU region. If there are too few data centers satisfying the policy, it will be rejected.",
+				Description: "Specify the policy that determines the region where your private key will be held locally. HTTPS connections to any excluded data center will still be fully encrypted, but will incur some latency while Keyless SSL is used to complete the handshake with the nearest allowed data center. Any combination of countries, specified by their two letter country code (https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2#Officially_assigned_code_elements) can be chosen, such as 'country: IN', as well as 'region: EU' which refers to the EU region. If there are too few data centers satisfying the policy, it will be rejected.\nNote: The API accepts this field as either \"policy\" or \"policy_restrictions\" in requests. Responses return this field as \"policy_restrictions\".",
 				Optional:    true,
 			},
 			"geo_restrictions": schema.SingleNestedAttribute{
@@ -86,6 +93,13 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 				},
 				Default: stringdefault.StaticString("ubiquitous"),
 			},
+			"deploy": schema.StringAttribute{
+				Description: "The environment to deploy the certificate to.\nAvailable values: \"staging\", \"production\".",
+				Optional:    true,
+				Validators: []validator.String{
+					stringvalidator.OneOfCaseInsensitive("staging", "production"),
+				},
+			},
 			"expires_on": schema.StringAttribute{
 				Description: "When the certificate from the authority expires.",
 				Computed:    true,
@@ -99,6 +113,10 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 				Description: "When the certificate was last modified.",
 				Computed:    true,
 				CustomType:  timetypes.RFC3339Type{},
+			},
+			"policy_restrictions": schema.StringAttribute{
+				Description: "The policy restrictions returned by the API. This field is returned in responses\nwhen a policy has been set. The API accepts the \"policy\" field in requests but\nreturns this field as \"policy_restrictions\" in responses.\n\nSpecifies the region(s) where your private key can be held locally for optimal\nTLS performance. Format is a boolean expression, for example:\n\"(country: US) or (region: EU)\"",
+				Computed:    true,
 			},
 			"priority": schema.Float64Attribute{
 				Description: "The order/priority in which the certificate will be used in a request. The higher priority will break ties across overlapping 'legacy_custom' certificates, but 'legacy_custom' certificates will always supercede 'sni_custom' certificates.",

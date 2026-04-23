@@ -7,6 +7,8 @@ resource "cloudflare_zero_trust_organization" "example_zero_trust_organization" 
     forbidden = "699d98642c564d2e855e9661899b7252"
     identity_denied = "699d98642c564d2e855e9661899b7252"
   }
+  deny_unmatched_requests = true
+  deny_unmatched_requests_exempted_zone_names = ["example.com"]
   is_ui_read_only = true
   login_design = {
     background_color = "#c5ed1b"
@@ -15,6 +17,11 @@ resource "cloudflare_zero_trust_organization" "example_zero_trust_organization" 
     logo_path = "https://example.com/logo.png"
     text_color = "#c5ed1b"
   }
+  mfa_config = {
+    allowed_authenticators = ["totp", "biometrics", "security_key"]
+    session_duration = "24h"
+  }
+  mfa_required_for_all_apps = false
   name = "Widget Corps Internal Applications"
   session_duration = "24h"
   ui_read_only_toggle_reason = "Temporarily turn off the UI read only lock to make a change via the UI"

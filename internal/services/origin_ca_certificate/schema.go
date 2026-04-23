@@ -22,6 +22,7 @@ var _ resource.ResourceWithConfigValidators = (*OriginCACertificateResource)(nil
 
 func ResourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
+		Version: 500,
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description:   "Identifier.",
@@ -30,12 +31,12 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 			},
 			"csr": schema.StringAttribute{
 				Description:   "The Certificate Signing Request (CSR). Must be newline-encoded.",
-				Optional:      true,
+				Required:      true,
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"request_type": schema.StringAttribute{
 				Description: "Signature type desired on certificate (\"origin-rsa\" (rsa), \"origin-ecc\" (ecdsa), or \"keyless-certificate\" (for Keyless SSL servers).\nAvailable values: \"origin-rsa\", \"origin-ecc\", \"keyless-certificate\".",
-				Optional:    true,
+				Required:    true,
 				Validators: []validator.String{
 					stringvalidator.OneOfCaseInsensitive(
 						"origin-rsa",
@@ -46,8 +47,8 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"hostnames": schema.ListAttribute{
-				Description:   "Array of hostnames or wildcard names (e.g., *.example.com) bound to the certificate.",
-				Optional:      true,
+				Description:   "Array of hostnames or wildcard names bound to the certificate.\nHostnames must be fully qualified domain names (FQDNs) belonging to zones on your account (e.g., `example.com` or `sub.example.com`). Wildcards are supported only as a `*.` prefix for a single level (e.g., `*.example.com`). Double wildcards (`*.*.example.com`) and interior wildcards (`foo.*.example.com`) are not allowed. The wildcard suffix must be a multi-label domain (`*.example.com` is valid, but `*.com` is not). Unicode/IDN hostnames are accepted and automatically converted to punycode.",
+				Required:      true,
 				ElementType:   types.StringType,
 				PlanModifiers: []planmodifier.List{listplanmodifier.RequiresReplace()},
 			},

@@ -214,7 +214,7 @@ func (r *WebAnalyticsSiteResource) Delete(ctx context.Context, req resource.Dele
 }
 
 func (r *WebAnalyticsSiteResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	var data *WebAnalyticsSiteModel = new(WebAnalyticsSiteModel)
+	var data = new(WebAnalyticsSiteModel)
 
 	path_account_id := ""
 	path_site_id := ""
@@ -255,6 +255,10 @@ func (r *WebAnalyticsSiteResource) ImportState(ctx context.Context, req resource
 	}
 	data = &env.Result
 	data.ID = data.SiteTag
+	attributes := env.Result.Ruleset.Attributes()
+	if zoneTag, ok := attributes["zone_tag"]; ok && !zoneTag.IsNull() && zoneTag.Type(ctx) == types.StringType {
+		data.ZoneTag = zoneTag.(types.String)
+	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }

@@ -17,6 +17,10 @@ var _ datasource.DataSourceWithConfigValidators = (*AuthenticatedOriginPullsCert
 func DataSourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
 		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Description: "Identifier.",
+				Computed:    true,
+			},
 			"certificate_id": schema.StringAttribute{
 				Description: "Identifier.",
 				Required:    true,
@@ -29,27 +33,18 @@ func DataSourceSchema(ctx context.Context) schema.Schema {
 				Description: "The zone's leaf certificate.",
 				Computed:    true,
 			},
-			"enabled": schema.BoolAttribute{
-				Description: "Indicates whether zone-level authenticated origin pulls is enabled.",
-				Computed:    true,
-			},
 			"expires_on": schema.StringAttribute{
 				Description: "When the certificate from the authority expires.",
 				Computed:    true,
 				CustomType:  timetypes.RFC3339Type{},
 			},
-			"id": schema.StringAttribute{
-				Description: "Identifier.",
-				Computed:    true,
-			},
 			"issuer": schema.StringAttribute{
 				Description: "The certificate authority that issued the certificate.",
 				Computed:    true,
 			},
-			"private_key": schema.StringAttribute{
-				Description: "The zone's private key.",
+			"serial_number": schema.StringAttribute{
+				Description: "The serial number on the uploaded certificate.",
 				Computed:    true,
-				Sensitive:   true,
 			},
 			"signature": schema.StringAttribute{
 				Description: "The type of hash used for the certificate.",

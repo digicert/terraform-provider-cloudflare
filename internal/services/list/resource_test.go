@@ -2,10 +2,9 @@ package list_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"log"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -16,6 +15,7 @@ import (
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/utils"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
@@ -38,7 +38,8 @@ func testSweepCloudflareList(r string) error {
 
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
 	if accountID == "" {
-		return errors.New("CLOUDFLARE_ACCOUNT_ID must be set")
+		tflog.Info(ctx, "Skipping lists sweep: CLOUDFLARE_ACCOUNT_ID not set")
+		return nil
 	}
 
 	lists, err := client.Rules.Lists.List(ctx, rules.ListListParams{
@@ -46,22 +47,27 @@ func testSweepCloudflareList(r string) error {
 	})
 	if err != nil {
 		tflog.Error(ctx, fmt.Sprintf("Failed to fetch Cloudflare Lists: %s", err))
+		return err
 	}
-
 	if len(lists.Result) == 0 {
-		log.Print("[DEBUG] No Cloudflare Lists to sweep")
+		tflog.Info(ctx, "No Cloudflare Lists to sweep")
 		return nil
 	}
 
 	for _, list := range lists.Result {
-		if !strings.HasPrefix(list.Name, listTestPrefix) {
+		// Check both standard test naming and legacy list test prefix
+		if !utils.ShouldSweepResource(list.Name) && !strings.HasPrefix(list.Name, listTestPrefix) {
 			continue
 		}
-		tflog.Info(ctx, fmt.Sprintf("Deleting Cloudflare List ID: %s", list.ID))
-		//nolint:errcheck
-		client.Rules.Lists.Delete(ctx, list.ID, rules.ListDeleteParams{
+		tflog.Info(ctx, fmt.Sprintf("Deleting Cloudflare List: %s (%s)", list.Name, list.ID))
+		_, err := client.Rules.Lists.Delete(ctx, list.ID, rules.ListDeleteParams{
 			AccountID: cloudflare.F(accountID),
 		})
+		if err != nil {
+			tflog.Error(ctx, fmt.Sprintf("Failed to delete Cloudflare List %s (%s): %s", list.Name, list.ID, err))
+			continue
+		}
+		tflog.Info(ctx, fmt.Sprintf("Deleted Cloudflare List: %s (%s)", list.Name, list.ID))
 	}
 
 	return nil
@@ -362,6 +368,26 @@ func TestAccCloudflareListWithItems_IP(t *testing.T) {
 		ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
+				Config:      testAccCheckCloudflareListWithCustomItem(rndIP, listNameIP, descriptionIP, accountID, `ip = "0f::"`),
+				ExpectError: regexp.MustCompile(`IP address "0f::" must be normalized: "f::"`),
+			},
+			{
+				Config:      testAccCheckCloudflareListWithCustomItem(rndIP, listNameIP, descriptionIP, accountID, `ip = "1.1.1.1/32"`),
+				ExpectError: regexp.MustCompile(`CIDR "1\.1\.1\.1/32" must be represented as "1\.1\.1\.1"`),
+			},
+			{
+				Config:      testAccCheckCloudflareListWithCustomItem(rndIP, listNameIP, descriptionIP, accountID, `ip = "f::/128"`),
+				ExpectError: regexp.MustCompile(`CIDR "f::/128" must be represented as "f::"`),
+			},
+			{
+				Config:      testAccCheckCloudflareListWithCustomItem(rndIP, listNameIP, descriptionIP, accountID, `ip = "1.1.1.1/24"`),
+				ExpectError: regexp.MustCompile(`CIDR "1\.1\.1\.1/24" must be normalized: "1\.1\.1\.0/24"`),
+			},
+			{
+				Config:      testAccCheckCloudflareListWithCustomItem(rndIP, listNameIP, descriptionIP, accountID, `ip = "f::1/64"`),
+				ExpectError: regexp.MustCompile(`CIDR "f::1/64" must be normalized: "f::/64"`),
+			},
+			{
 				Config: testAccCheckCloudflareListWithIPItems(rndIP, listNameIP, descriptionIP, accountID),
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(resourceNameIP, "name", listNameIP),
@@ -591,6 +617,10 @@ func testAccCheckCloudflareListWithIPItems(resourceName, listName, description, 
 	return acctest.LoadTestCase("listwithipitems.tf", resourceName, listName, description, accountID)
 }
 
+func testAccCheckCloudflareListWithCustomItem(resourceName, listName, description, accountID, itemTf string) string {
+	return acctest.LoadTestCase("listwithcustomitem.tf", resourceName, listName, description, accountID, itemTf)
+}
+
 func testAccCheckCloudflareListWithNullIPItems(resourceName, listName, description, accountID string) string {
 	return acctest.LoadTestCase("listwithnullipitems.tf", resourceName, listName, description, accountID)
 }
@@ -653,4 +683,40 @@ func checkListAndPopulate(resourceName string, list *rules.ListsList) func(*terr
 
 		return nil
 	}
+}
+
+func TestAccUpgradeList_FromPublishedV5(t *testing.T) {
+	rndIP := utils.GenerateRandomResourceName()
+	descriptionIP := fmt.Sprintf("description.%s", rndIP)
+	listNameIP := fmt.Sprintf("%s%s", listTestPrefix, rndIP)
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+
+	config := testAccCheckCloudflareList(rndIP, listNameIP, descriptionIP, accountID, "ip")
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			acctest.TestAccPreCheck(t)
+			acctest.TestAccPreCheck_AccountID(t)
+		},
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.16.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+		},
+	})
 }

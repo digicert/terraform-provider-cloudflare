@@ -31,8 +31,8 @@ resource "cloudflare_zero_trust_dlp_predefined_entry" "example_zero_trust_dlp_pr
 
 ### Optional
 
-- `profile_id` (String) This field is not actually used as the owning profile for a predefined entry is already set
-to a predefined profile
+- `profile_id` (String) This field is not used as the owning profile.
+For predefined entries it is already set to a predefined profile.
 
 ### Read-Only
 
@@ -41,12 +41,15 @@ Determines if the words should be matched in a case-sensitive manner
 Cannot be set to false if secret is true
 - `confidence` (Attributes) (see [below for nested schema](#nestedatt--confidence))
 - `created_at` (String)
+- `description` (String)
 - `id` (String) The ID of this resource.
 - `name` (String)
 - `pattern` (Attributes) (see [below for nested schema](#nestedatt--pattern))
+- `profiles` (Attributes List) (see [below for nested schema](#nestedatt--profiles))
 - `secret` (Boolean)
 - `type` (String) Available values: "custom", "predefined", "integration", "exact_data", "document_fingerprint", "word_list".
 - `updated_at` (String)
+- `upload_status` (String) Available values: "empty", "uploading", "pending", "processing", "failed", "complete".
 - `variant` (Attributes) (see [below for nested schema](#nestedatt--variant))
 - `word_list` (String)
 
@@ -68,6 +71,15 @@ Read-Only:
 - `validation` (String, Deprecated) Available values: "luhn".
 
 
+<a id="nestedatt--profiles"></a>
+### Nested Schema for `profiles`
+
+Read-Only:
+
+- `id` (String)
+- `name` (String)
+
+
 <a id="nestedatt--variant"></a>
 ### Nested Schema for `variant`
 
@@ -84,3 +96,5 @@ Import is supported using the following syntax:
 ```shell
 $ terraform import cloudflare_zero_trust_dlp_predefined_entry.example '<account_id>/<entry_id>'
 ```
+
+

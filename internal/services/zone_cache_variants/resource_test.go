@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/acctest"
@@ -11,6 +12,7 @@ import (
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/utils"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 )
 
 func TestMain(m *testing.M) {
@@ -27,15 +29,31 @@ func init() {
 
 func testSweepCloudflareZoneCacheVariants(r string) error {
 	ctx := context.Background()
+	zoneID := os.Getenv("CLOUDFLARE_ZONE_ID")
+
+	if zoneID == "" {
+		tflog.Info(ctx, "Skipping zone cache variants sweep: CLOUDFLARE_ZONE_ID not set")
+		return nil
+	}
+
 	client, clientErr := acctest.SharedV1Client() // TODO(terraform): replace with SharedV2Clent
 	if clientErr != nil {
 		tflog.Error(ctx, fmt.Sprintf("Failed to create Cloudflare client: %s", clientErr))
+		return clientErr
 	}
 
-	zoneID := os.Getenv("CLOUDFLARE_ZONE_ID")
-
-	tflog.Info(ctx, fmt.Sprintf("Deleting Zone Cache Variants for zone: %q", zoneID))
-	client.DeleteZoneCacheVariants(context.Background(), zoneID)
+	tflog.Info(ctx, fmt.Sprintf("Deleting Zone Cache Variants for zone: %s", zoneID))
+	err := client.DeleteZoneCacheVariants(context.Background(), zoneID)
+	if err != nil {
+		// If the setting doesn't exist (error 1144), that's fine - it's already "cleaned up"
+		if strings.Contains(err.Error(), "1144") || strings.Contains(err.Error(), "does not exist") {
+			tflog.Info(ctx, "Zone Cache Variants setting does not exist (already clean)")
+			return nil
+		}
+		tflog.Error(ctx, fmt.Sprintf("Failed to delete zone cache variants: %s", err))
+		return err
+	}
+	tflog.Info(ctx, "Deleted Zone Cache Variants")
 
 	return nil
 }
@@ -130,4 +148,35 @@ func testAccCloudflareZoneCacheVariants_OneExt(zoneID, name string) string {
 
 func testAccCloudflareZoneCacheVariants_AllExt(zoneID, name string) string {
 	return acctest.LoadTestCase("allext.tf", zoneID, name)
+}
+
+func TestAccUpgradeZoneCacheVariants_FromPublishedV5(t *testing.T) {
+	zoneID := os.Getenv("CLOUDFLARE_ZONE_ID")
+	rnd := utils.GenerateRandomResourceName()
+
+	config := testAccCloudflareZoneCacheVariants_OneExt(zoneID, rnd)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() { acctest.TestAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.16.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+		},
+	})
 }

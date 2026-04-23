@@ -88,9 +88,18 @@ resource "cloudflare_authenticated_origin_pulls_certificate" "example_authentica
 - `expires_on` (String) When the certificate from the authority expires.
 - `id` (String) Identifier.
 - `issuer` (String) The certificate authority that issued the certificate.
+- `serial_number` (String) The serial number on the uploaded certificate.
 - `signature` (String) The type of hash used for the certificate.
 - `status` (String) Status of the certificate activation.
 Available values: "initializing", "pending_deployment", "pending_deletion", "active", "deleted", "deployment_timed_out", "deletion_timed_out".
 - `uploaded_on` (String) This is the time the certificate was uploaded.
+
+## Import
+
+Import is supported using the following syntax:
+
+```shell
+$ terraform import cloudflare_authenticated_origin_pulls_certificate.example '<zone_id>/<certificate_id>'
+```
 
 

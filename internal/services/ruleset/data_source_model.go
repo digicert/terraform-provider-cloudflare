@@ -78,6 +78,7 @@ type RulesetRulesActionParametersDataSourceModel struct {
 	AutomaticHTTPSRewrites  types.Bool                                                                          `tfsdk:"automatic_https_rewrites" json:"automatic_https_rewrites,computed"`
 	Autominify              customfield.NestedObject[RulesetRulesActionParametersAutominifyDataSourceModel]     `tfsdk:"autominify" json:"autominify,computed"`
 	BIC                     types.Bool                                                                          `tfsdk:"bic" json:"bic,computed"`
+	ContentConverter        types.Bool                                                                          `tfsdk:"content_converter" json:"content_converter,computed"`
 	DisableApps             types.Bool                                                                          `tfsdk:"disable_apps" json:"disable_apps,computed"`
 	DisableRUM              types.Bool                                                                          `tfsdk:"disable_rum" json:"disable_rum,computed"`
 	DisableZaraz            types.Bool                                                                          `tfsdk:"disable_zaraz" json:"disable_zaraz,computed"`
@@ -87,6 +88,9 @@ type RulesetRulesActionParametersDataSourceModel struct {
 	Mirage                  types.Bool                                                                          `tfsdk:"mirage" json:"mirage,computed"`
 	OpportunisticEncryption types.Bool                                                                          `tfsdk:"opportunistic_encryption" json:"opportunistic_encryption,computed"`
 	Polish                  types.String                                                                        `tfsdk:"polish" json:"polish,computed"`
+	RedirectsForAITraining  types.Bool                                                                          `tfsdk:"redirects_for_ai_training" json:"redirects_for_ai_training,computed"`
+	RequestBodyBuffering    types.String                                                                        `tfsdk:"request_body_buffering" json:"request_body_buffering,computed"`
+	ResponseBodyBuffering   types.String                                                                        `tfsdk:"response_body_buffering" json:"response_body_buffering,computed"`
 	RocketLoader            types.Bool                                                                          `tfsdk:"rocket_loader" json:"rocket_loader,computed"`
 	SecurityLevel           types.String                                                                        `tfsdk:"security_level" json:"security_level,computed"`
 	ServerSideExcludes      types.Bool                                                                          `tfsdk:"server_side_excludes" json:"server_side_excludes,computed"`
@@ -109,11 +113,30 @@ type RulesetRulesActionParametersDataSourceModel struct {
 	ReadTimeout              types.Int64                                                                                       `tfsdk:"read_timeout" json:"read_timeout,computed"`
 	RespectStrongEtags       types.Bool                                                                                        `tfsdk:"respect_strong_etags" json:"respect_strong_etags,computed"`
 	ServeStale               customfield.NestedObject[RulesetRulesActionParametersServeStaleDataSourceModel]                   `tfsdk:"serve_stale" json:"serve_stale,computed"`
+	StripETags               types.Bool                                                                                        `tfsdk:"strip_etags" json:"strip_etags,computed"`
+	StripLastModified        types.Bool                                                                                        `tfsdk:"strip_last_modified" json:"strip_last_modified,computed"`
+	StripSetCookie           types.Bool                                                                                        `tfsdk:"strip_set_cookie" json:"strip_set_cookie,computed"`
 	CookieFields             customfield.NestedObjectList[RulesetRulesActionParametersCookieFieldsDataSourceModel]             `tfsdk:"cookie_fields" json:"cookie_fields,computed"`
 	RawResponseFields        customfield.NestedObjectList[RulesetRulesActionParametersRawResponseFieldsDataSourceModel]        `tfsdk:"raw_response_fields" json:"raw_response_fields,computed"`
 	RequestFields            customfield.NestedObjectList[RulesetRulesActionParametersRequestFieldsDataSourceModel]            `tfsdk:"request_fields" json:"request_fields,computed"`
 	ResponseFields           customfield.NestedObjectList[RulesetRulesActionParametersResponseFieldsDataSourceModel]           `tfsdk:"response_fields" json:"response_fields,computed"`
 	TransformedRequestFields customfield.NestedObjectList[RulesetRulesActionParametersTransformedRequestFieldsDataSourceModel] `tfsdk:"transformed_request_fields" json:"transformed_request_fields,computed"`
+	MaxAge                   customfield.NestedObject[RulesetRulesActionParametersSetCacheControlValueDataSourceModel]         `tfsdk:"max_age" json:"max-age,computed"`
+	SMaxage                  customfield.NestedObject[RulesetRulesActionParametersSetCacheControlValueDataSourceModel]         `tfsdk:"s_maxage" json:"s-maxage,computed"`
+	StaleWhileRevalidate     customfield.NestedObject[RulesetRulesActionParametersSetCacheControlValueDataSourceModel]         `tfsdk:"stale_while_revalidate" json:"stale-while-revalidate,computed"`
+	StaleIfError             customfield.NestedObject[RulesetRulesActionParametersSetCacheControlValueDataSourceModel]         `tfsdk:"stale_if_error" json:"stale-if-error,computed"`
+	Private                  customfield.NestedObject[RulesetRulesActionParametersSetCacheControlQualifiersDataSourceModel]    `tfsdk:"private" json:"private,computed"`
+	NoCache                  customfield.NestedObject[RulesetRulesActionParametersSetCacheControlQualifiersDataSourceModel]    `tfsdk:"no_cache" json:"no-cache,computed"`
+	MustRevalidate           customfield.NestedObject[RulesetRulesActionParametersSetCacheControlSimpleDataSourceModel]        `tfsdk:"must_revalidate" json:"must-revalidate,computed"`
+	ProxyRevalidate          customfield.NestedObject[RulesetRulesActionParametersSetCacheControlSimpleDataSourceModel]        `tfsdk:"proxy_revalidate" json:"proxy-revalidate,computed"`
+	MustUnderstand           customfield.NestedObject[RulesetRulesActionParametersSetCacheControlSimpleDataSourceModel]        `tfsdk:"must_understand" json:"must-understand,computed"`
+	NoTransform              customfield.NestedObject[RulesetRulesActionParametersSetCacheControlSimpleDataSourceModel]        `tfsdk:"no_transform" json:"no-transform,computed"`
+	Immutable                customfield.NestedObject[RulesetRulesActionParametersSetCacheControlSimpleDataSourceModel]        `tfsdk:"immutable" json:"immutable,computed"`
+	NoStore                  customfield.NestedObject[RulesetRulesActionParametersSetCacheControlSimpleDataSourceModel]        `tfsdk:"no_store" json:"no-store,computed"`
+	Public                   customfield.NestedObject[RulesetRulesActionParametersSetCacheControlSimpleDataSourceModel]        `tfsdk:"public" json:"public,computed"`
+	Operation                types.String                                                                                      `tfsdk:"operation" json:"operation,computed"`
+	Values                   customfield.List[types.String]                                                                    `tfsdk:"values" json:"values,computed"`
+	Expression               types.String                                                                                      `tfsdk:"expression" json:"expression,computed"`
 }
 
 type RulesetRulesActionParametersResponseDataSourceModel struct {
@@ -329,4 +352,21 @@ type RulesetRulesRatelimitDataSourceModel struct {
 	RequestsToOrigin        types.Bool                     `tfsdk:"requests_to_origin" json:"requests_to_origin,computed,decode_null_to_zero"`
 	ScorePerPeriod          types.Int64                    `tfsdk:"score_per_period" json:"score_per_period,computed"`
 	ScoreResponseHeaderName types.String                   `tfsdk:"score_response_header_name" json:"score_response_header_name,computed"`
+}
+
+type RulesetRulesActionParametersSetCacheControlValueDataSourceModel struct {
+	Operation      types.String `tfsdk:"operation" json:"operation,computed"`
+	Value          types.Int64  `tfsdk:"value" json:"value,computed"`
+	CloudflareOnly types.Bool   `tfsdk:"cloudflare_only" json:"cloudflare_only,computed,decode_null_to_zero"`
+}
+
+type RulesetRulesActionParametersSetCacheControlQualifiersDataSourceModel struct {
+	Operation      types.String                   `tfsdk:"operation" json:"operation,computed"`
+	Qualifiers     customfield.List[types.String] `tfsdk:"qualifiers" json:"qualifiers,computed"`
+	CloudflareOnly types.Bool                     `tfsdk:"cloudflare_only" json:"cloudflare_only,computed,decode_null_to_zero"`
+}
+
+type RulesetRulesActionParametersSetCacheControlSimpleDataSourceModel struct {
+	Operation      types.String `tfsdk:"operation" json:"operation,computed"`
+	CloudflareOnly types.Bool   `tfsdk:"cloudflare_only" json:"cloudflare_only,computed,decode_null_to_zero"`
 }

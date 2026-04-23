@@ -14,14 +14,13 @@ import (
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/utils"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
-	"github.com/pkg/errors"
 )
 
 func TestMain(m *testing.M) {
 	resource.TestMain(m)
 }
-
 
 var (
 	domain = os.Getenv("CLOUDFLARE_DOMAIN")
@@ -39,42 +38,60 @@ func testSweepCloudflarePageRules(r string) error {
 	client, clientErr := acctest.SharedV1Client() // TODO(terraform): replace with SharedV2Clent
 	if clientErr != nil {
 		tflog.Error(ctx, fmt.Sprintf("Failed to create Cloudflare client: %s", clientErr))
+		return clientErr
 	}
 
 	zoneID := os.Getenv("CLOUDFLARE_ZONE_ID")
 	altZoneID := os.Getenv("CLOUDFLARE_ALT_ZONE_ID")
 
 	if zoneID == "" || altZoneID == "" {
-		return errors.New("CLOUDFLARE_ZONE_ID and CLOUDFLARE_ALT_ZONE_ID must be set for cloudflare_page_rule sweepers")
+		tflog.Info(ctx, "Skipping page rules sweep: CLOUDFLARE_ZONE_ID and CLOUDFLARE_ALT_ZONE_ID must be set")
+		return nil
 	}
 
-	pageRules, err := client.ListPageRules(context.Background(), zoneID)
+	pageRules, err := client.ListPageRules(ctx, zoneID)
 	if err != nil {
-		return fmt.Errorf("error listing page rules: %w", err)
+		// If the zone doesn't exist or is invalid, just log and continue (don't fail the sweep)
+		tflog.Warn(ctx, fmt.Sprintf("Failed to fetch page rules for zone %s: %s (skipping)", zoneID, err))
+		// Continue to try the alt zone
+		pageRules = []cloudflare.PageRule{}
 	}
-
-	for _, pageRule := range pageRules {
-		err := client.DeletePageRule(context.Background(), zoneID, pageRule.ID)
-		if err != nil {
-			return fmt.Errorf("error deleting page rule %s: %w", pageRule.ID, err)
+	if len(pageRules) == 0 {
+		tflog.Info(ctx, fmt.Sprintf("No page rules to sweep in zone %s", zoneID))
+	} else {
+		for _, pageRule := range pageRules {
+			tflog.Info(ctx, fmt.Sprintf("Deleting page rule: %s (zone: %s)", pageRule.ID, zoneID))
+			err := client.DeletePageRule(ctx, zoneID, pageRule.ID)
+			if err != nil {
+				tflog.Error(ctx, fmt.Sprintf("Failed to delete page rule %s: %s", pageRule.ID, err))
+				continue
+			}
+			tflog.Info(ctx, fmt.Sprintf("Deleted page rule: %s", pageRule.ID))
 		}
 	}
-
-	altPageRules, err := client.ListPageRules(context.Background(), altZoneID)
+	altPageRules, err := client.ListPageRules(ctx, altZoneID)
 	if err != nil {
-		return fmt.Errorf("error listing page rules: %w", err)
+		// If the zone doesn't exist or is invalid, just log and continue (don't fail the sweep)
+		tflog.Warn(ctx, fmt.Sprintf("Failed to fetch page rules for alt zone %s: %s (skipping)", altZoneID, err))
+		return nil
 	}
+	if len(altPageRules) == 0 {
+		tflog.Info(ctx, fmt.Sprintf("No page rules to sweep in alt zone %s", altZoneID))
+	} else {
+		for _, pageRule := range altPageRules {
 
-	for _, pageRule := range altPageRules {
-		err := client.DeletePageRule(context.Background(), altZoneID, pageRule.ID)
-		if err != nil {
-			return fmt.Errorf("error deleting page rule %s: %w", pageRule.ID, err)
+			tflog.Info(ctx, fmt.Sprintf("Deleting page rule: %s (zone: %s)", pageRule.ID, altZoneID))
+			err := client.DeletePageRule(ctx, altZoneID, pageRule.ID)
+			if err != nil {
+				tflog.Error(ctx, fmt.Sprintf("Failed to delete page rule %s: %s", pageRule.ID, err))
+				continue
+			}
+			tflog.Info(ctx, fmt.Sprintf("Deleted page rule: %s", pageRule.ID))
 		}
 	}
 
 	return nil
 }
-
 func TestAccCloudflarePageRule_Basic(t *testing.T) {
 	var pageRule cloudflare.PageRule
 	domain := os.Getenv("CLOUDFLARE_DOMAIN")
@@ -781,6 +798,87 @@ func TestAccCloudflarePageRule_BrowserCheckOnOff(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, consts.ZoneIDSchemaKey, zoneID),
 					resource.TestCheckResourceAttr(resourceName, "target", fmt.Sprintf("%s", target)),
 					resource.TestCheckResourceAttr(resourceName, "actions.browser_check", "off"),
+				),
+				PlanOnly: true,
+			},
+			{
+				ResourceName: resourceName,
+				ImportStateIdFunc: func(state *terraform.State) (string, error) {
+					rs, ok := state.RootModule().Resources[resourceName]
+					if !ok {
+						return "", fmt.Errorf("not found: %s", resourceName)
+					}
+					return fmt.Sprintf("%s/%s", zoneID, rs.Primary.ID), nil
+				},
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
+func TestAccCloudflarePageRule_AutomaticHTTPSRewritesOnOff(t *testing.T) {
+	t.Skip("API Error: Invalid setting automatic_https_rewrites")
+
+	var pageRule cloudflare.PageRule
+	domain := os.Getenv("CLOUDFLARE_DOMAIN")
+	zoneID := os.Getenv("CLOUDFLARE_ZONE_ID")
+	rnd := utils.GenerateRandomResourceName()
+	resourceName := "cloudflare_page_rule." + rnd
+	target := fmt.Sprintf("%s.%s", rnd, domain)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { acctest.TestAccPreCheck(t) },
+		ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+		CheckDestroy:             testAccCheckCloudflarePageRuleDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccCheckCloudflarePageRuleConfigString(rnd, zoneID, target, "automatic_https_rewrites", "on"),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckCloudflarePageRuleExists(resourceName, &pageRule),
+					resource.TestCheckResourceAttr(resourceName, consts.ZoneIDSchemaKey, zoneID),
+					resource.TestCheckResourceAttr(resourceName, "target", fmt.Sprintf("%s", target)),
+					resource.TestCheckResourceAttr(resourceName, "actions.automatic_https_rewrites", "on"),
+				),
+			},
+			{
+				Config: testAccCheckCloudflarePageRuleConfigString(rnd, zoneID, target, "automatic_https_rewrites", "on"),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckCloudflarePageRuleExists(resourceName, &pageRule),
+					resource.TestCheckResourceAttr(resourceName, consts.ZoneIDSchemaKey, zoneID),
+					resource.TestCheckResourceAttr(resourceName, "target", fmt.Sprintf("%s", target)),
+					resource.TestCheckResourceAttr(resourceName, "actions.automatic_https_rewrites", "on"),
+				),
+				PlanOnly: true,
+			},
+			{
+				ResourceName: resourceName,
+				ImportStateIdFunc: func(state *terraform.State) (string, error) {
+					rs, ok := state.RootModule().Resources[resourceName]
+					if !ok {
+						return "", fmt.Errorf("not found: %s", resourceName)
+					}
+					return fmt.Sprintf("%s/%s", zoneID, rs.Primary.ID), nil
+				},
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+			{
+				Config: testAccCheckCloudflarePageRuleConfigString(rnd, zoneID, target, "automatic_https_rewrites", "off"),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckCloudflarePageRuleExists(resourceName, &pageRule),
+					resource.TestCheckResourceAttr(resourceName, consts.ZoneIDSchemaKey, zoneID),
+					resource.TestCheckResourceAttr(resourceName, "target", fmt.Sprintf("%s", target)),
+					resource.TestCheckResourceAttr(resourceName, "actions.automatic_https_rewrites", "off"),
+				),
+			},
+			{
+				Config: testAccCheckCloudflarePageRuleConfigString(rnd, zoneID, target, "automatic_https_rewrites", "off"),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckCloudflarePageRuleExists(resourceName, &pageRule),
+					resource.TestCheckResourceAttr(resourceName, consts.ZoneIDSchemaKey, zoneID),
+					resource.TestCheckResourceAttr(resourceName, "target", fmt.Sprintf("%s", target)),
+					resource.TestCheckResourceAttr(resourceName, "actions.automatic_https_rewrites", "off"),
 				),
 				PlanOnly: true,
 			},
@@ -1829,6 +1927,12 @@ func TestAccCloudflarePageRule_TrueClientIPHeaderOnOff(t *testing.T) {
 }
 
 func TestAccCloudflarePageRule_WAFOnOff(t *testing.T) {
+	// The WAF page rule setting is deprecated for zones that have been migrated to
+	// Managed Rulesets. The API returns:
+	//   ".settings[0]: WAF is deprecated for this zone, Managed Rulesets should be used instead"
+	// Skip this test since the CI test zone no longer supports the legacy WAF page rule action.
+	t.Skip("Skipping: WAF page rule setting is deprecated for this zone; Managed Rulesets should be used instead")
+
 	var pageRule cloudflare.PageRule
 	domain := os.Getenv("CLOUDFLARE_DOMAIN")
 	zoneID := os.Getenv("CLOUDFLARE_ZONE_ID")
@@ -3956,4 +4060,53 @@ func testAccCheckCloudflarePageRuleHasAction(pageRule *cloudflare.PageRule, key 
 
 func testAccCheckCloudflarePageRuleEmtpyCookie(zoneID, rnd, target string) string {
 	return acctest.LoadTestCase("pageruleemtpycookie.tf", zoneID, target, rnd)
+}
+
+func TestAccUpgradePageRule_FromPublishedV5(t *testing.T) {
+	rnd := utils.GenerateRandomResourceName()
+	zoneID := os.Getenv("CLOUDFLARE_ZONE_ID")
+	target := fmt.Sprintf("%s.%s", rnd, domain)
+
+	config := acctest.LoadTestCase("pageruleconfigbasic.tf", zoneID, target, rnd)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			acctest.TestAccPreCheck(t)
+			acctest.TestAccPreCheck_ZoneID(t)
+		},
+		Steps: []resource.TestStep{
+			{
+				// Step 1: Create with v5.16.0 (schema version 0)
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.16.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				// Step 2: Upgrade to v5.17.0 (stepping stone - schema version 1)
+				// This is required because schema version 0 -> 1 state upgrader
+				// expects v4 SDKv2 format, but v5.16.0 state is v5 Plugin Framework format
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.17.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				// Step 3: Upgrade to current provider version
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+		},
+	})
 }

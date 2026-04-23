@@ -13,35 +13,30 @@ description: |-
 
 ```terraform
 resource "cloudflare_account_token" "example_account_token" {
-  account_id = "023e105f4ecef8ad9ca31a8372d0c353"
-  name = "readonly token"
+  account_id = "b67e14daa5f8dceeb91fe5449ba496eb"
+  name       = "workers read-only token"
+
   policies = [{
     effect = "allow"
     permission_groups = [{
-      id = "c8fed203ed3043cba015a93ad1616f1f"
-      meta = {
-        key = "key"
-        value = "value"
-      }
-    }, {
-      id = "82e64a83756745bbbb1c9c2701bf816b"
-      meta = {
-        key = "key"
-        value = "value"
-      }
+      id = "1a71c399035b4950a1bd1466bbe4f420"
+      }, {
+      id = "8b47d2786a534c08a1f94ee8f9f599ef"
     }]
-    resources = {
-      foo = "string"
-    }
+    resources = jsonencode({
+      "com.cloudflare.api.account.b67e14daa5f8dceeb91fe5449ba496eb" = "*"
+    })
   }]
+
   condition = {
     request_ip = {
-      in = ["123.123.123.0/24", "2606:4700::/32"]
-      not_in = ["123.123.123.100/24", "2606:4700:4700::/48"]
+      in     = ["123.123.123.0/24", "2606:4700::/32"]
+      not_in = ["123.123.123.0/28", "2606:4700:4700::/48"]
     }
   }
-  expires_on = "2020-01-01T00:00:00Z"
-  not_before = "2018-07-01T05:20:00Z"
+
+  expires_on = "2027-10-01T00:00:00Z"
+  not_before = "2025-10-01T00:00:00Z"
 }
 ```
 
@@ -52,7 +47,7 @@ resource "cloudflare_account_token" "example_account_token" {
 
 - `account_id` (String) Account identifier tag.
 - `name` (String) Token name.
-- `policies` (Attributes List) List of access policies assigned to the token. (see [below for nested schema](#nestedatt--policies))
+- `policies` (Attributes Set) Set of access policies assigned to the token. (see [below for nested schema](#nestedatt--policies))
 
 ### Optional
 
@@ -78,11 +73,7 @@ Required:
 - `effect` (String) Allow or deny operations against the resources.
 Available values: "allow", "deny".
 - `permission_groups` (Attributes Set) A set of permission groups that are specified to the policy. (see [below for nested schema](#nestedatt--policies--permission_groups))
-- `resources` (Map of String) A list of resource names that the policy applies to.
-
-Read-Only:
-
-- `id` (String) Policy identifier.
+- `resources` (String) A json object representing the resources that are specified to the policy.
 
 <a id="nestedatt--policies--permission_groups"></a>
 ### Nested Schema for `policies.permission_groups`
@@ -90,23 +81,6 @@ Read-Only:
 Required:
 
 - `id` (String) Identifier of the permission group.
-
-Optional:
-
-- `meta` (Attributes) Attributes associated to the permission group. (see [below for nested schema](#nestedatt--policies--permission_groups--meta))
-
-Read-Only:
-
-- `name` (String) Name of the permission group.
-
-<a id="nestedatt--policies--permission_groups--meta"></a>
-### Nested Schema for `policies.permission_groups.meta`
-
-Optional:
-
-- `key` (String)
-- `value` (String)
-
 
 
 
@@ -132,3 +106,5 @@ Import is supported using the following syntax:
 ```shell
 $ terraform import cloudflare_account_token.example '<account_id>/<token_id>'
 ```
+
+

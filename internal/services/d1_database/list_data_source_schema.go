@@ -8,6 +8,7 @@ import (
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/customfield"
 	"github.com/hashicorp/terraform-plugin-framework-timetypes/timetypes"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -39,10 +40,21 @@ func ListDataSourceSchema(ctx context.Context) schema.Schema {
 				CustomType:  customfield.NewNestedObjectListType[D1DatabasesResultDataSourceModel](ctx),
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
+						"id": schema.StringAttribute{
+							Description: "D1 database identifier (UUID).",
+							Computed:    true,
+						},
 						"created_at": schema.StringAttribute{
 							Description: "Specifies the timestamp the resource was created as an ISO8601 string.",
 							Computed:    true,
 							CustomType:  timetypes.RFC3339Type{},
+						},
+						"jurisdiction": schema.StringAttribute{
+							Description: "Specify the location to restrict the D1 database to run and store data. If this option is present, the location hint is ignored.\nAvailable values: \"eu\", \"fedramp\".",
+							Computed:    true,
+							Validators: []validator.String{
+								stringvalidator.OneOfCaseInsensitive("eu", "fedramp"),
+							},
 						},
 						"name": schema.StringAttribute{
 							Description: "D1 database name.",

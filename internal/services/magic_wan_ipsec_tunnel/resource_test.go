@@ -14,6 +14,7 @@ import (
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/consts"
 	"github.com/cloudflare/terraform-provider-cloudflare/internal/utils"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 )
 
 func TestMain(m *testing.M) {
@@ -37,7 +38,8 @@ func testSweepCloudflareMagicWanIPsecTunnel(r string) error {
 
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
 	if accountID == "" {
-		return fmt.Errorf("CLOUDFLARE_ACCOUNT_ID must be set")
+		tflog.Info(ctx, "Skipping IPsec tunnels sweep: CLOUDFLARE_ACCOUNT_ID not set")
+		return nil
 	}
 
 	tflog.Info(ctx, "Starting to list IPsec tunnels for sweeping")
@@ -58,15 +60,20 @@ func testSweepCloudflareMagicWanIPsecTunnel(r string) error {
 	failedCount := 0
 
 	for _, tunnel := range tunnels {
+		// Use standard filtering helper
+		if !utils.ShouldSweepResource(tunnel.Name) {
+			continue
+		}
+
 		tflog.Info(ctx, fmt.Sprintf("Deleting IPsec tunnel: %s (%s)", tunnel.Name, tunnel.ID))
-		
+
 		_, err := client.DeleteMagicTransitIPsecTunnel(ctx, accountID, tunnel.ID)
 		if err != nil {
 			tflog.Error(ctx, fmt.Sprintf("Failed to delete IPsec tunnel %s: %s", tunnel.ID, err))
 			failedCount++
 			continue
 		}
-		
+
 		deletedCount++
 		tflog.Info(ctx, fmt.Sprintf("Successfully deleted IPsec tunnel: %s", tunnel.ID))
 	}
@@ -106,6 +113,8 @@ func TestAccCloudflareIPsecTunnelExists(t *testing.T) {
 					resource.TestCheckResourceAttr(name, "health_check.rate", "low"),
 					resource.TestCheckResourceAttr(name, "psk", "asdf1234"),
 					resource.TestCheckResourceAttr(name, "replay_protection", "true"),
+					resource.TestCheckResourceAttr(name, "automatic_return_routing", "true"),
+					resource.TestCheckResourceAttr(name, "bgp.customer_asn", "65001"),
 				),
 			},
 			{
@@ -185,6 +194,13 @@ func TestAccCloudflareIPsecTunnelUpdateDescription(t *testing.T) {
 					resource.TestCheckResourceAttr(name, "description", rnd+"-updated"),
 				),
 			},
+			{
+				Config: testAccCheckCloudflareIPsecTunnelNoDescription(rnd, accountID, cfIP, interfaceAddr, psk),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckCloudflareIPsecTunnelExists(name, &Tunnel),
+					resource.TestCheckResourceAttr(name, "description", rnd+"-updated"),
+				),
+			},
 		},
 	})
 }
@@ -225,4 +241,41 @@ func TestAccCloudflareIPsecTunnelUpdatePsk(t *testing.T) {
 
 func testAccCheckCloudflareIPsecTunnelSimple(ID, description, accountID, psk, cfIP, interfaceAddr string) string {
 	return acctest.LoadTestCase("ipsectunnelsimple.tf", ID, description, accountID, psk, cfIP, interfaceAddr)
+}
+
+func testAccCheckCloudflareIPsecTunnelNoDescription(ID, accountID, cfIP, interfaceAddr, psk string) string {
+	return acctest.LoadTestCase("ipsectunnelnodescription.tf", ID, accountID, cfIP, interfaceAddr, psk)
+}
+
+func TestAccUpgradeMagicWanIpsecTunnel_FromPublishedV5(t *testing.T) {
+	rnd := utils.GenerateRandomResourceName()
+	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	psk := "asdf1234"
+	cfIP := utils.LookupMagicWanCfIP(t, accountID)
+	interfaceAddr := "10.212.0.10/31"
+	config := testAccCheckCloudflareIPsecTunnelSimple(rnd, rnd, accountID, psk, cfIP, interfaceAddr)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() { acctest.TestAccPreCheck_AccountID(t) },
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"cloudflare": {
+						Source:            "cloudflare/cloudflare",
+						VersionConstraint: "5.16.0",
+					},
+				},
+				Config: config,
+			},
+			{
+				ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+		},
+	})
 }

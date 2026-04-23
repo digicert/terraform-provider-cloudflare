@@ -35,4 +35,12 @@ resource "cloudflare_leaked_credential_check_rule" "example_leaked_credential_ch
 
 - `id` (String) Defines the unique ID for this custom detection.
 
+## Import
+
+Import is supported using the following syntax:
+
+```shell
+$ terraform import cloudflare_leaked_credential_check_rule.example '<zone_id>/<detection_id>'
+```
+
 

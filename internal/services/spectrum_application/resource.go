@@ -210,7 +210,7 @@ func (r *SpectrumApplicationResource) Delete(ctx context.Context, req resource.D
 }
 
 func (r *SpectrumApplicationResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	var data *SpectrumApplicationModel = new(SpectrumApplicationModel)
+	var data = new(SpectrumApplicationModel)
 
 	path_zone_id := ""
 	path_app_id := ""
@@ -244,7 +244,7 @@ func (r *SpectrumApplicationResource) ImportState(ctx context.Context, req resou
 		return
 	}
 	bytes, _ := io.ReadAll(res.Body)
-	err = apijson.UnmarshalComputed(bytes, &env)
+	err = apijson.Unmarshal(bytes, &env)
 	if err != nil {
 		resp.Diagnostics.AddError("failed to deserialize http request", err.Error())
 		return

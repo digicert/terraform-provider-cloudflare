@@ -20,6 +20,7 @@ resource "cloudflare_zero_trust_dlp_entry" "example_zero_trust_dlp_entry" {
     regex = "regex"
     validation = "luhn"
   }
+  description = "description"
   profile_id = "182bd5e5-6e1a-4fe4-a799-aa6d9a6ab26e"
 }
 ```
@@ -36,6 +37,7 @@ resource "cloudflare_zero_trust_dlp_entry" "example_zero_trust_dlp_entry" {
 
 ### Optional
 
+- `description` (String)
 - `profile_id` (String)
 - `type` (String) Available values: "custom", "predefined", "integration".
 
@@ -47,8 +49,10 @@ Cannot be set to false if secret is true
 - `confidence` (Attributes) (see [below for nested schema](#nestedatt--confidence))
 - `created_at` (String)
 - `id` (String) The ID of this resource.
+- `profiles` (Attributes List) (see [below for nested schema](#nestedatt--profiles))
 - `secret` (Boolean)
 - `updated_at` (String)
+- `upload_status` (String) Available values: "empty", "uploading", "pending", "processing", "failed", "complete".
 - `variant` (Attributes) (see [below for nested schema](#nestedatt--variant))
 - `word_list` (String)
 
@@ -73,6 +77,15 @@ Read-Only:
 - `available` (Boolean) Indicates whether this entry has any form of validation that is not an AI remote service.
 
 
+<a id="nestedatt--profiles"></a>
+### Nested Schema for `profiles`
+
+Read-Only:
+
+- `id` (String)
+- `name` (String)
+
+
 <a id="nestedatt--variant"></a>
 ### Nested Schema for `variant`
 
@@ -89,3 +102,5 @@ Import is supported using the following syntax:
 ```shell
 $ terraform import cloudflare_zero_trust_dlp_entry.example '<account_id>/<entry_id>'
 ```
+
+

@@ -24,6 +24,7 @@ var _ resource.ResourceWithConfigValidators = (*ZeroTrustGatewayPolicyResource)(
 
 func ResourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
+		Version: 500,
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description:   "Identify the API resource with a UUID.",
@@ -68,7 +69,9 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 			},
 			"filters": schema.ListAttribute{
 				Description: "Specify the protocol or layer to evaluate the traffic, identity, and device posture expressions. Can only contain a single value.",
+				Computed:    true,
 				Optional:    true,
+				CustomType:  customfield.NewListType[types.String](ctx),
 				Validators: []validator.List{
 					listvalidator.ValueStringsAre(
 						stringvalidator.OneOfCaseInsensitive(
@@ -364,10 +367,20 @@ func ResourceSchema(ctx context.Context) schema.Schema {
 							},
 						},
 					},
+					"forensic_copy": schema.SingleNestedAttribute{
+						Description: "Configure whether a copy of the HTTP request will be sent to storage when the rule matches.",
+						Optional:    true,
+						Attributes: map[string]schema.Attribute{
+							"enabled": schema.BoolAttribute{
+								Description: "Enable sending the copy to storage.",
+								Optional:    true,
+							},
+						},
+					},
 					"ignore_cname_category_matches": schema.BoolAttribute{
 						Description: "Ignore category matches at CNAME domains in a response. When off, evaluate categories in this rule against all CNAME domain categories in the response. Settable only for `dns` and `dns_resolver` rules.",
-						Computed:    true,
 						Optional:    true,
+						Computed:    true,
 					},
 					"insecure_disable_dnssec_validation": schema.BoolAttribute{
 						Description: "Specify whether to disable DNSSEC validation (for Allow actions) [INSECURE]. Settable only for `dns` rules.",
